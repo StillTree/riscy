@@ -3,15 +3,21 @@ const cpu_32 = @import("cpu_32.zig");
 const a = @import("assembler.zig");
 
 pub fn main() !void {
-    var state = cpu_32.CpuState{
-        .registers = [_]i32{0} ** 32,
-        .prog_counter = 0,
-        .mem = [_]u8{0} ** 16,
+    var state = cpu_32.CpuState.init();
+
+    const prog = comptime block: {
+        const addi = a.assemble("addi x5, x0, 10");
+        const addi2 = a.assemble("addi x6, x0, 3");
+        const add = a.assemble("add x7, x5, x6");
+
+        break :block addi ++ addi2 ++ add;
     };
 
-    state.mem = a.assemble("addi x1, x1, -15") ** 4;
+    @memcpy(state.mem[0..12], prog[0..12]);
 
-    try cpu_32.run(&state);
+    try state.step();
+    try state.step();
+    try state.step();
 
     state.printRegisters();
 }
