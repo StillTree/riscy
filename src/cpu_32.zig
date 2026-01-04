@@ -92,8 +92,6 @@ pub const CpuState = struct {
     }
 
     fn execOpcodeOp(self: *CpuState, inst: isa.FormatR) !void {
-        std.debug.print("{d} {d} {d}", .{inst.rd, inst.rs1, inst.rs2});
-
         const funct7_flag = ((inst.funct7 >> 5) & 1) == 1;
 
         switch (inst.funct3) {
@@ -161,9 +159,134 @@ pub const CpuState = struct {
         }
     }
 
+    fn execOpcodeJal(self: *CpuState, inst: isa.FormatJ) !void {
+        const imm: i32 = @intCast(@as(i21, @bitCast((inst.imm_1_10 << 1) |
+            (@as(i21, inst.imm_11) << 11) |
+            (@as(i21, inst.imm_12_19) << 12) |
+            (@as(i21, inst.imm_20) << 20))));
+        const target: u32 = self.pc +% @as(u32, @bitCast(imm));
+        self.setReg(inst.rd, @bitCast(self.pc + 4));
+        // This is done to compensate for the main loop that always increments the program counter after executing an instruction
+        self.pc = target -% 4;
+    }
+
+    fn execOpcodeJalr(self: *CpuState, inst: isa.FormatI) !void {
+        const target: u32 = @as(u32, @bitCast((self.reg[inst.rs1] +% inst.imm))) & ~@as(u32, 1);
+        self.setReg(inst.rd, @bitCast(self.pc + 4));
+        // This is done to compensate for the main loop that always increments the program counter after executing an instruction
+        self.pc = target -% 4;
+    }
+
+    fn execOpcodeBranch(self: *CpuState, inst: isa.FormatB) !void {
+        const imm: i32 = @intCast(@as(i13, @bitCast((inst.imm_1_4 << 1) |
+            (@as(i13, inst.imm_5_10) << 5) |
+            (@as(i13, inst.imm_11) << 11) |
+            (@as(i13, inst.imm_12) << 12))));
+        const target: u32 = self.pc +% @as(u32, @bitCast(imm));
+
+        switch (inst.funct3) {
+            // beq
+            0b000 => {
+                if (self.reg[inst.rs1] == self.reg[inst.rs2]) {
+                    self.pc = target -% 4;
+                }
+            },
+            // bne
+            0b001 => {
+                if (self.reg[inst.rs1] != self.reg[inst.rs2]) {
+                    self.pc = target -% 4;
+                }
+            },
+            // blt
+            0b100 => {
+                if (self.reg[inst.rs1] < self.reg[inst.rs2]) {
+                    self.pc = target -% 4;
+                }
+            },
+            // bge
+            0b101 => {
+                if (self.reg[inst.rs1] >= self.reg[inst.rs2]) {
+                    self.pc = target -% 4;
+                }
+            },
+            // bltu
+            0b110 => {
+                if (@as(u32, @bitCast(self.reg[inst.rs1])) < @as(u32, @bitCast(self.reg[inst.rs2]))) {
+                    self.pc = target -% 4;
+                }
+            },
+            // bgeu
+            0b111 => {
+                if (@as(u32, @bitCast(self.reg[inst.rs1])) >= @as(u32, @bitCast(self.reg[inst.rs2]))) {
+                    self.pc = target -% 4;
+                }
+            },
+            else => return error.InvalidFunct3,
+        }
+    }
+
+    fn execOpcodeLoad(self: *CpuState, inst: isa.FormatI) !void {
+        const addr: u32 = @bitCast(self.reg[inst.rs1] +% inst.imm);
+
+        switch (inst.funct3) {
+            // lb
+            0b000 => {
+                const val: i8 = @bitCast(self.mem[addr]);
+                self.setReg(inst.rd, val);
+            },
+            // lbu
+            0b100 => {
+                const val: u8 = self.mem[addr];
+                self.setReg(inst.rd, @as(i32, val));
+            },
+            // lh
+            0b001 => {
+                const val = std.mem.readInt(i16, self.mem[addr..][0..2], .little);
+                self.setReg(inst.rd, val);
+            },
+            // lhu
+            0b101 => {
+                const val = std.mem.readInt(u16, self.mem[addr..][0..2], .little);
+                self.setReg(inst.rd, @as(i32, val));
+            },
+            // lw
+            0b010 => {
+                const val = std.mem.readInt(i32, self.mem[addr..][0..4], .little);
+                self.setReg(inst.rd, val);
+            },
+            else => return error.InvalidFunct3,
+        }
+    }
+
+    fn execOpcodeStore(self: *CpuState, inst: isa.FormatS) !void {
+        const imm: i12 = @bitCast(inst.imm_0_4 | (@as(u12, inst.imm_5_11) << 5));
+        const addr: u32 = @bitCast(self.reg[inst.rs1] +% imm);
+
+        switch (inst.funct3) {
+            // sb
+            0b000 => {
+                const val: u8 = @truncate(@as(u32, @bitCast(self.reg[inst.rs2])));
+                self.mem[addr] = val;
+            },
+            // sh
+            0b001 => {
+                const val: u16 = @truncate(@as(u32, @bitCast(self.reg[inst.rs2])));
+                std.mem.writeInt(u16, self.mem[addr..][0..2], val, .little);
+            },
+            // sw
+            0b010 => {
+                const val: u32 = @bitCast(self.reg[inst.rs2]);
+                std.mem.writeInt(u32, self.mem[addr..][0..4], val, .little);
+            },
+            else => return error.InvalidFunct3,
+        }
+    }
+
     fn execTypeI(self: *CpuState, inst: isa.FormatI) !void {
         switch (inst.opcode) {
             .imm => try self.execOpcodeImm(inst),
+            .jalr => try self.execOpcodeJalr(inst),
+            .load => try self.execOpcodeLoad(inst),
             else => return error.InvalidOpcode,
         }
     }
@@ -179,6 +302,27 @@ pub const CpuState = struct {
     fn execTypeR(self: *CpuState, inst: isa.FormatR) !void {
         switch (inst.opcode) {
             .op => try self.execOpcodeOp(inst),
+            else => return error.InvalidOpcode,
+        }
+    }
+
+    fn execTypeJ(self: *CpuState, inst: isa.FormatJ) !void {
+        switch (inst.opcode) {
+            .jal => try self.execOpcodeJal(inst),
+            else => return error.InvalidOpcode,
+        }
+    }
+
+    fn execTypeB(self: *CpuState, inst: isa.FormatB) !void {
+        switch (inst.opcode) {
+            .branch => try self.execOpcodeBranch(inst),
+            else => return error.InvalidOpcode,
+        }
+    }
+
+    fn execTypeS(self: *CpuState, inst: isa.FormatS) !void {
+        switch (inst.opcode) {
+            .store => try self.execOpcodeStore(inst),
             else => return error.InvalidOpcode,
         }
     }
@@ -200,6 +344,9 @@ pub const CpuState = struct {
             .typeI => |i| try self.execTypeI(i),
             .typeU => |i| try self.execTypeU(i),
             .typeR => |i| try self.execTypeR(i),
+            .typeJ => |i| try self.execTypeJ(i),
+            .typeB => |i| try self.execTypeB(i),
+            .typeS => |i| try self.execTypeS(i),
             .unknown => return error.IllegalInstruction,
         }
 
