@@ -4,9 +4,11 @@ pub const Reg = u5;
 
 pub const Opcode = enum(u7) {
     imm = 0b0010011,
+    imm32 = 0b0011011,
     lui = 0b0110111,
     auipc = 0b0010111,
     op = 0b0110011,
+    op32 = 0b0111011,
     jal = 0b1101111,
     jalr = 0b1100111,
     branch = 0b1100011,
