@@ -2,19 +2,21 @@ const std = @import("std");
 const isa = @import("instructions.zig");
 
 pub const CpuState = struct {
-    reg: [32]i32,
-    pc: u32,
+    reg: [32]i64,
+    pc: u64,
     mem: [1024]u8,
+    csr: [4096]u64,
 
     pub fn init() CpuState {
         return .{
-            .reg = [_]i32{0} ** 32,
+            .reg = [_]i64{0} ** 32,
             .pc = 0,
             .mem = [_]u8{0} ** 1024,
+            .csr = [_]u64{0} ** 4096,
         };
     }
 
-    pub fn setReg(self: *CpuState, reg: isa.Reg, value: i32) void {
+    pub fn setReg(self: *CpuState, reg: isa.Reg, value: i64) void {
         if (reg == 0) return;
 
         self.reg[reg] = value;
@@ -282,11 +284,78 @@ pub const CpuState = struct {
         }
     }
 
+    fn execOpcodeSystem(self: *CpuState, inst: isa.FormatI) !void {
+        switch (inst.funct3) {
+            0b000 => {
+                const funct12: u12 = @bitCast(inst.imm);
+
+                switch (funct12) {
+                    // ecall
+                    0 => return error.Halt,
+                    // ebreak
+                    1 => return error.Halt,
+                }
+            },
+            // csrrw
+            0b001 => {
+                const csr: u12 = @bitCast(inst.imm);
+                if (inst.rd != 0) {
+                    self.setReg(inst.rd, @bitCast(self.csr[csr]));
+                }
+                self.csr[csr] = @bitCast(self.reg[inst.rs1]);
+            },
+            // csrrs
+            0b010 => {
+                const csr: u12 = @bitCast(inst.imm);
+                self.setReg(inst.rd, @bitCast(self.csr[csr]));
+                if (inst.rs1 != 0) {
+                    self.csr[csr] |= @bitCast(self.reg[inst.rs1]);
+                }
+            },
+            // csrrc
+            0b011 => {
+                const csr: u12 = @bitCast(inst.imm);
+                self.setReg(inst.rd, @bitCast(self.csr[csr]));
+                if (inst.rs1 != 0) {
+                    self.csr[csr] &= ~@as(u32, @bitCast(self.reg[inst.rs1]));
+                }
+            },
+            // csrrwi
+            0b101 => {
+                const csr: u12 = @bitCast(inst.imm);
+                if (inst.rd != 0) {
+                    self.setReg(inst.rd, @bitCast(self.csr[csr]));
+                }
+                self.csr[csr] = inst.rs1;
+            },
+            // csrrsi
+            0b110 => {
+                const csr: u12 = @bitCast(inst.imm);
+                self.setReg(inst.rd, @bitCast(self.csr[csr]));
+                if (inst.rs1 != 0) {
+                    self.csr[csr] |= inst.rs1;
+                }
+            },
+            // csrrci
+            0b111 => {
+                const csr: u12 = @bitCast(inst.imm);
+                self.setReg(inst.rd, @bitCast(self.csr[csr]));
+                if (inst.rs1 != 0) {
+                    self.csr[csr] &= ~@as(u32, inst.rs1);
+                }
+            },
+            else => return error.InvalidFunct3,
+        }
+    }
+
     fn execTypeI(self: *CpuState, inst: isa.FormatI) !void {
         switch (inst.opcode) {
             .imm => try self.execOpcodeImm(inst),
             .jalr => try self.execOpcodeJalr(inst),
             .load => try self.execOpcodeLoad(inst),
+            // TODO: Make only FENCE FENCE.TSO and FENCE.I instruction nop
+            .misc_mem => return,
+            .system => try self.execOpcodeSystem(inst),
             else => return error.InvalidOpcode,
         }
     }
@@ -329,7 +398,7 @@ pub const CpuState = struct {
 
     pub fn printRegisters(self: *CpuState) void {
         for (self.reg, 0..) |reg, i| {
-            std.debug.print("x{: <2}: {d: <11} 0x{x:0>8}\n", .{ i, reg, @as(u32, @bitCast(reg)) });
+            std.debug.print("x{: <2}: {d: <21} 0x{x:0>16}\n", .{ i, reg, @as(u32, @bitCast(reg)) });
         }
     }
 

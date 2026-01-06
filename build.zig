@@ -4,6 +4,10 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const riscv_core = b.createModule(.{
+        .root_source_file = b.path("src/root.zig"),
+    });
+
     const exe = b.addExecutable(.{
         .name = "riscy",
         .root_module = b.createModule(.{
@@ -13,6 +17,7 @@ pub fn build(b: *std.Build) void {
         }),
     });
 
+    exe.root_module.addImport("riscv_core", riscv_core);
     b.installArtifact(exe);
 
     const run_step = b.step("run", "Run the app");
@@ -26,12 +31,16 @@ pub fn build(b: *std.Build) void {
         run_cmd.addArgs(args);
     }
 
-    const exe_tests = b.addTest(.{
-        .root_module = exe.root_module,
+    const riscv_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tests/root.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
     });
 
-    const run_exe_tests = b.addRunArtifact(exe_tests);
+    const run_riscv_tests = b.addRunArtifact(riscv_tests);
 
-    const test_step = b.step("test", "Run tests");
-    test_step.dependOn(&run_exe_tests.step);
+    const test_step = b.step("riscv-tests", "Run RISC-V unit tests");
+    test_step.dependOn(&run_riscv_tests.step);
 }

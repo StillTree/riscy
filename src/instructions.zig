@@ -12,6 +12,8 @@ pub const Opcode = enum(u7) {
     branch = 0b1100011,
     load = 0b0000011,
     store = 0b0100011,
+    misc_mem = 0b0001111,
+    system = 0b1110011,
     _,
 };
 
@@ -78,12 +80,10 @@ pub const FormatS = struct {
 };
 
 pub fn decode(raw: u32) Instruction {
-    std.debug.print("{b}\n", .{@as(u7, @truncate(raw))});
-
     const opcode: Opcode = @enumFromInt(@as(u7, @truncate(raw)));
 
     switch (opcode) {
-        .imm, .jalr, .load => {
+        .imm, .jalr, .load, .misc_mem, .system => {
             return Instruction{
                 .typeI = .{
                     .opcode = opcode,
