@@ -37,7 +37,6 @@ pub const CpuState = struct {
             },
             // sltiu
             0b011 => {
-                // TODO: investigate correctness
                 if (@as(u64, @bitCast(self.reg[inst.rs1])) < @as(u64, @bitCast(@as(i64, inst.imm)))) {
                     self.setReg(inst.rd, 1);
                 } else {
@@ -298,7 +297,6 @@ pub const CpuState = struct {
     fn execOpcodeLoad(self: *CpuState, inst: isa.FormatI) !void {
         const addr: u64 = @bitCast(self.reg[inst.rs1] +% inst.imm);
 
-        // TODO: verify correctness
         switch (inst.funct3) {
             // lb
             0b000 => {
