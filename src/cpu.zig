@@ -1,16 +1,27 @@
 const std = @import("std");
 const isa = @import("instructions.zig");
+const csr = @import("csr.zig");
+
+pub const Priv = enum(u2) {
+    user = 0b00,
+    supervisor = 0b01,
+    machine = 0b11,
+};
 
 pub const CpuState = struct {
     reg: [32]i64,
     pc: u64,
     mem: [1024]u8,
+    cur_priv: Priv,
+    csr_state: csr.State,
 
     pub fn init() CpuState {
         return .{
             .reg = [_]i64{0} ** 32,
             .pc = 0,
             .mem = [_]u8{0} ** 1024,
+            .cur_priv = .machine,
+            .csr_state = csr.State.init(),
         };
     }
 
@@ -366,7 +377,7 @@ pub const CpuState = struct {
         }
     }
 
-    fn execOpcodeSystem(_: *CpuState, inst: isa.FormatI) !void {
+    fn execOpcodeSystem(self: *CpuState, inst: isa.FormatI) !void {
         switch (inst.funct3) {
             0b000 => {
                 const funct12: u12 = @bitCast(inst.imm);
@@ -378,54 +389,60 @@ pub const CpuState = struct {
                     1 => return error.Halt,
                 }
             },
-            // // csrrw
-            // 0b001 => {
-            //     const csr: u12 = @bitCast(inst.imm);
-            //     if (inst.rd != 0) {
-            //         self.setReg(inst.rd, @bitCast(self.csr[csr]));
-            //     }
-            //     self.csr[csr] = @bitCast(self.reg[inst.rs1]);
-            // },
-            // // csrrs
-            // 0b010 => {
-            //     const csr: u12 = @bitCast(inst.imm);
-            //     self.setReg(inst.rd, @bitCast(self.csr[csr]));
-            //     if (inst.rs1 != 0) {
-            //         self.csr[csr] |= @bitCast(self.reg[inst.rs1]);
-            //     }
-            // },
-            // // csrrc
-            // 0b011 => {
-            //     const csr: u12 = @bitCast(inst.imm);
-            //     self.setReg(inst.rd, @bitCast(self.csr[csr]));
-            //     if (inst.rs1 != 0) {
-            //         self.csr[csr] &= ~@as(u32, @bitCast(self.reg[inst.rs1]));
-            //     }
-            // },
-            // // csrrwi
-            // 0b101 => {
-            //     const csr: u12 = @bitCast(inst.imm);
-            //     if (inst.rd != 0) {
-            //         self.setReg(inst.rd, @bitCast(self.csr[csr]));
-            //     }
-            //     self.csr[csr] = inst.rs1;
-            // },
-            // // csrrsi
-            // 0b110 => {
-            //     const csr: u12 = @bitCast(inst.imm);
-            //     self.setReg(inst.rd, @bitCast(self.csr[csr]));
-            //     if (inst.rs1 != 0) {
-            //         self.csr[csr] |= inst.rs1;
-            //     }
-            // },
-            // // csrrci
-            // 0b111 => {
-            //     const csr: u12 = @bitCast(inst.imm);
-            //     self.setReg(inst.rd, @bitCast(self.csr[csr]));
-            //     if (inst.rs1 != 0) {
-            //         self.csr[csr] &= ~@as(u32, inst.rs1);
-            //     }
-            // },
+            // csrrw
+            0b001 => {
+                const addr: csr.Addr = @enumFromInt(@as(u12, @bitCast(inst.imm)));
+                if (inst.rd != 0) {
+                    const csrVal: u64 = self.csr_state.read(addr);
+                    self.setReg(inst.rd, @bitCast(csrVal));
+                }
+                self.csr_state.write(addr, @bitCast(self.reg[inst.rs1]));
+            },
+            // csrrs
+            0b010 => {
+                const addr: csr.Addr = @enumFromInt(@as(u12, @bitCast(inst.imm)));
+                const csrVal: u64 = self.csr_state.read(addr);
+                self.setReg(inst.rd, csrVal);
+                if (inst.rs1 != 0) {
+                    self.csr_state.write(addr, @bitCast(csrVal | self.reg[inst.rs1]));
+                }
+            },
+            // csrrc
+            0b011 => {
+                const addr: csr.Addr = @enumFromInt(@as(u12, @bitCast(inst.imm)));
+                const csrVal: u64 = self.csr_state.read(addr);
+                self.setReg(inst.rd, csrVal);
+                if (inst.rs1 != 0) {
+                    self.csr_state.write(addr, @bitCast(csrVal & ~@as(u64, @bitCast(self.reg[inst.rs1]))));
+                }
+            },
+            // csrrwi
+            0b101 => {
+                const addr: csr.Addr = @enumFromInt(@as(u12, @bitCast(inst.imm)));
+                if (inst.rd != 0) {
+                    const csrVal: u64 = self.csr_state.read(addr);
+                    self.setReg(inst.rd, @bitCast(csrVal));
+                }
+                self.csr_state.write(addr, inst.rs1);
+            },
+            // csrrsi
+            0b110 => {
+                const addr: csr.Addr = @enumFromInt(@as(u12, @bitCast(inst.imm)));
+                const csrVal: u64 = self.csr_state.read(addr);
+                self.setReg(inst.rd, csrVal);
+                if (inst.rs1 != 0) {
+                    self.csr_state.write(addr, csrVal | inst.rs1);
+                }
+            },
+            // csrrci
+            0b111 => {
+                const addr: csr.Addr = @enumFromInt(@as(u12, @bitCast(inst.imm)));
+                const csrVal: u64 = self.csr_state.read(addr);
+                self.setReg(inst.rd, csrVal);
+                if (inst.rs1 != 0) {
+                    self.csr_state.write(addr, csrVal & ~@as(u64, inst.rs1));
+                }
+            },
             else => return error.InvalidFunct3,
         }
     }
@@ -504,5 +521,9 @@ pub const CpuState = struct {
         }
 
         self.pc += 4;
+    }
+
+    pub fn trap(self: *CpuState, cause: csr.Cause) !void {
+        const mstatus_masked = self.csr_state.read(csr.Addr.mstatus) & ~((1 << csr.Status.MIE_SHIFT) | (1 << csr.Status.MPIE_SHIFT) | (3 << csr.Status.MPP_SHIFT));
     }
 };
