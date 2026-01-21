@@ -85,7 +85,7 @@ pub fn decode(raw: u32) Instruction {
     const opcode: Opcode = @enumFromInt(@as(u7, @truncate(raw)));
 
     switch (opcode) {
-        .imm, .jalr, .load, .misc_mem, .system => {
+        .imm, .imm32, .jalr, .load, .misc_mem, .system => {
             return Instruction{
                 .typeI = .{
                     .opcode = opcode,
@@ -105,7 +105,7 @@ pub fn decode(raw: u32) Instruction {
                 },
             };
         },
-        .op => {
+        .op, .op32 => {
             return Instruction{
                 .typeR = .{
                     .opcode = opcode,

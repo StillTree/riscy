@@ -46,7 +46,7 @@ pub const Status = struct {
         };
     }
 
-    inline fn writeMask(priv: cpu.priv) u64 {
+    inline fn writeMask(priv: cpu.Priv) u64 {
         return switch (priv) {
             .machine => MSTATUS_WRITE_MASK,
             .supervisor => SSTATUS_WRITE_MASK,
@@ -54,7 +54,7 @@ pub const Status = struct {
         };
     }
 
-    inline fn readMask(priv: cpu.priv) u64 {
+    inline fn readMask(priv: cpu.Priv) u64 {
         return switch (priv) {
             .machine => MSTATUS_READ_MASK,
             .supervisor => SSTATUS_READ_MASK,
@@ -63,12 +63,12 @@ pub const Status = struct {
     }
 
     pub fn read(self: *const Status, priv: cpu.Priv) u64 {
-        return self.val & comptime readMask(priv);
+        return self.val & readMask(priv);
     }
 
     pub fn write(self: *Status, newVal: u64, priv: cpu.Priv) void {
         const mask = writeMask(priv);
-        self.val = (self.value & ~mask) | (newVal & mask);
+        self.val = (self.val & ~mask) | (newVal & mask);
     }
 };
 
@@ -117,7 +117,7 @@ pub const State = struct {
     pub fn init() State {
         return .{
             .status = Status.init(),
-            .mcause = .breakpoint,
+            .mcause = .hardware_error,
             .mepc = 0,
             .mtvec = 0,
         };
@@ -125,27 +125,27 @@ pub const State = struct {
 
     pub fn write(self: *State, csrAddr: Addr, val: u64) !void {
         switch (csrAddr) {
-            .misa => 0,
-            .mstatus => self.status.write(val, cpu.Priv.Machine),
+            .misa => {},
+            .mstatus => self.status.write(val, cpu.Priv.machine),
             .mtvec => {
                 self.mtvec = val;
             },
             .mcause => {
-                self.mcause = val;
+                self.mcause = @enumFromInt(val);
             },
             .mepc => {
                 self.mepc = val;
             },
-            else => error.CsrUnimplemented,
+            else => return error.CsrUnimplemented,
         }
     }
 
     pub fn read(self: *State, csrAddr: Addr) !u64 {
         return switch (csrAddr) {
             .misa => 0,
-            .mstatus => self.status.read(cpu.Priv.Machine),
+            .mstatus => self.status.read(cpu.Priv.machine),
             .mtvec => self.mtvec,
-            .mcause => self.mcause,
+            .mcause => @intFromEnum(self.mcause),
             .mepc => self.mepc,
             else => error.CsrUnimplemented,
         };

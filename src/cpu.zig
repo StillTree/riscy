@@ -11,7 +11,7 @@ pub const Priv = enum(u2) {
 pub const CpuState = struct {
     reg: [32]i64,
     pc: u64,
-    mem: [1024]u8,
+    mem: [16384]u8,
     cur_priv: Priv,
     csr_state: csr.State,
 
@@ -19,7 +19,7 @@ pub const CpuState = struct {
         return .{
             .reg = [_]i64{0} ** 32,
             .pc = 0,
-            .mem = [_]u8{0} ** 1024,
+            .mem = [_]u8{0} ** 16384,
             .cur_priv = .machine,
             .csr_state = csr.State.init(),
         };
@@ -235,7 +235,7 @@ pub const CpuState = struct {
                     self.setReg(inst.rd, val);
                 }
             },
-            else => error.InvalidFunct3,
+            else => return error.InvalidFunct3,
         }
     }
 
@@ -392,67 +392,68 @@ pub const CpuState = struct {
                     // mret
                     0b1100000010 => {
                         // TOOD: Finish this
-                        const mpie = (self.csr_state.read(csr.Addr.mstatus) >> csr.Status.MPIE_SHIFT) & 1;
-                        const mstatus_masked = self.csr_state.read(csr.Addr.mstatus) & ~((1 << csr.Status.MIE_SHIFT));
+                        const mpie = (try self.csr_state.read(csr.Addr.mstatus) >> csr.Status.MPIE_SHIFT) & 1;
+                        const mstatus_masked = try self.csr_state.read(csr.Addr.mstatus) & ~@as(u64, 1 << csr.Status.MIE_SHIFT);
 
                         const new_mstatus = mstatus_masked | (mpie << csr.Status.MIE_SHIFT);
-                        self.csr_state.write(csr.Addr.mstatus, new_mstatus);
+                        try self.csr_state.write(csr.Addr.mstatus, new_mstatus);
                         self.pc = try self.csr_state.read(csr.Addr.mepc);
                     },
+                    else => return error.InvalidFunct12,
                 }
             },
             // csrrw
             0b001 => {
                 const addr: csr.Addr = @enumFromInt(@as(u12, @bitCast(inst.imm)));
                 if (inst.rd != 0) {
-                    const csrVal: u64 = self.csr_state.read(addr);
+                    const csrVal: u64 = try self.csr_state.read(addr);
                     self.setReg(inst.rd, @bitCast(csrVal));
                 }
-                self.csr_state.write(addr, @bitCast(self.reg[inst.rs1]));
+                try self.csr_state.write(addr, @bitCast(self.reg[inst.rs1]));
             },
             // csrrs
             0b010 => {
                 const addr: csr.Addr = @enumFromInt(@as(u12, @bitCast(inst.imm)));
-                const csrVal: u64 = self.csr_state.read(addr);
-                self.setReg(inst.rd, csrVal);
+                const csrVal: u64 = try self.csr_state.read(addr);
+                self.setReg(inst.rd, @bitCast(csrVal));
                 if (inst.rs1 != 0) {
-                    self.csr_state.write(addr, @bitCast(csrVal | self.reg[inst.rs1]));
+                    try self.csr_state.write(addr, @bitCast(csrVal | @as(u64, @bitCast(self.reg[inst.rs1]))));
                 }
             },
             // csrrc
             0b011 => {
                 const addr: csr.Addr = @enumFromInt(@as(u12, @bitCast(inst.imm)));
-                const csrVal: u64 = self.csr_state.read(addr);
-                self.setReg(inst.rd, csrVal);
+                const csrVal: u64 = try self.csr_state.read(addr);
+                self.setReg(inst.rd, @bitCast(csrVal));
                 if (inst.rs1 != 0) {
-                    self.csr_state.write(addr, @bitCast(csrVal & ~@as(u64, @bitCast(self.reg[inst.rs1]))));
+                    try self.csr_state.write(addr, @bitCast(csrVal & ~@as(u64, @bitCast(self.reg[inst.rs1]))));
                 }
             },
             // csrrwi
             0b101 => {
                 const addr: csr.Addr = @enumFromInt(@as(u12, @bitCast(inst.imm)));
                 if (inst.rd != 0) {
-                    const csrVal: u64 = self.csr_state.read(addr);
+                    const csrVal: u64 = try self.csr_state.read(addr);
                     self.setReg(inst.rd, @bitCast(csrVal));
                 }
-                self.csr_state.write(addr, inst.rs1);
+                try self.csr_state.write(addr, inst.rs1);
             },
             // csrrsi
             0b110 => {
                 const addr: csr.Addr = @enumFromInt(@as(u12, @bitCast(inst.imm)));
-                const csrVal: u64 = self.csr_state.read(addr);
-                self.setReg(inst.rd, csrVal);
+                const csrVal: u64 = try self.csr_state.read(addr);
+                self.setReg(inst.rd, @bitCast(csrVal));
                 if (inst.rs1 != 0) {
-                    self.csr_state.write(addr, csrVal | inst.rs1);
+                    try self.csr_state.write(addr, csrVal | inst.rs1);
                 }
             },
             // csrrci
             0b111 => {
                 const addr: csr.Addr = @enumFromInt(@as(u12, @bitCast(inst.imm)));
-                const csrVal: u64 = self.csr_state.read(addr);
-                self.setReg(inst.rd, csrVal);
+                const csrVal: u64 = try self.csr_state.read(addr);
+                self.setReg(inst.rd, @bitCast(csrVal));
                 if (inst.rs1 != 0) {
-                    self.csr_state.write(addr, csrVal & ~@as(u64, inst.rs1));
+                    try self.csr_state.write(addr, csrVal & ~@as(u64, inst.rs1));
                 }
             },
             else => return error.InvalidFunct3,
@@ -538,19 +539,19 @@ pub const CpuState = struct {
     pub fn trap(self: *CpuState, cause: csr.Cause) !void {
         // This is obviously very much not complete
         // TODO: Finish this
-        const mie = (self.csr_state.read(csr.Addr.mstatus) >> csr.Status.MIE_SHIFT) & 1;
-        const mstatus_masked = self.csr_state.read(csr.Addr.mstatus) & ~((1 << csr.Status.MPIE_SHIFT));
+        const mie = (try self.csr_state.read(csr.Addr.mstatus) >> csr.Status.MIE_SHIFT) & 1;
+        const mstatus_masked = try self.csr_state.read(csr.Addr.mstatus) & ~@as(u64, 1 << csr.Status.MPIE_SHIFT);
 
         const new_mstatus = mstatus_masked | (mie << csr.Status.MPIE_SHIFT);
-        self.csr_state.write(csr.Addr.mstatus, new_mstatus);
-        self.csr_state.write(csr.Addr.mcause, @intFromEnum(cause));
-        self.csr_state.write(csr.Addr.mepc, self.pc);
+        try self.csr_state.write(csr.Addr.mstatus, new_mstatus);
+        try self.csr_state.write(csr.Addr.mcause, @intFromEnum(cause));
+        try self.csr_state.write(csr.Addr.mepc, self.pc);
 
         const mtvec = try self.csr_state.read(csr.Addr.mtvec);
         const mode: csr.MtvecMode = @enumFromInt(mtvec & 3);
         if (mode == .vectored)
             return error.MtvecModeUnsupported;
 
-        self.pc = mtvec & ~3;
+        self.pc = mtvec & ~@as(u64, 3);
     }
 };
