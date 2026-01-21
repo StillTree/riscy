@@ -384,9 +384,21 @@ pub const CpuState = struct {
 
                 switch (funct12) {
                     // ecall
-                    0 => return error.Halt,
+                    0b0000000000 => {
+                        try self.trap(csr.Cause.ecall_from_machine);
+                    },
                     // ebreak
-                    1 => return error.Halt,
+                    0b1000000000 => return error.Halt,
+                    // mret
+                    0b1100000010 => {
+                        // TOOD: Finish this
+                        const mpie = (self.csr_state.read(csr.Addr.mstatus) >> csr.Status.MPIE_SHIFT) & 1;
+                        const mstatus_masked = self.csr_state.read(csr.Addr.mstatus) & ~((1 << csr.Status.MIE_SHIFT));
+
+                        const new_mstatus = mstatus_masked | (mpie << csr.Status.MIE_SHIFT);
+                        self.csr_state.write(csr.Addr.mstatus, new_mstatus);
+                        self.pc = try self.csr_state.read(csr.Addr.mepc);
+                    },
                 }
             },
             // csrrw
@@ -524,6 +536,21 @@ pub const CpuState = struct {
     }
 
     pub fn trap(self: *CpuState, cause: csr.Cause) !void {
-        const mstatus_masked = self.csr_state.read(csr.Addr.mstatus) & ~((1 << csr.Status.MIE_SHIFT) | (1 << csr.Status.MPIE_SHIFT) | (3 << csr.Status.MPP_SHIFT));
+        // This is obviously very much not complete
+        // TODO: Finish this
+        const mie = (self.csr_state.read(csr.Addr.mstatus) >> csr.Status.MIE_SHIFT) & 1;
+        const mstatus_masked = self.csr_state.read(csr.Addr.mstatus) & ~((1 << csr.Status.MPIE_SHIFT));
+
+        const new_mstatus = mstatus_masked | (mie << csr.Status.MPIE_SHIFT);
+        self.csr_state.write(csr.Addr.mstatus, new_mstatus);
+        self.csr_state.write(csr.Addr.mcause, @intFromEnum(cause));
+        self.csr_state.write(csr.Addr.mepc, self.pc);
+
+        const mtvec = try self.csr_state.read(csr.Addr.mtvec);
+        const mode: csr.MtvecMode = @enumFromInt(mtvec & 3);
+        if (mode == .vectored)
+            return error.MtvecModeUnsupported;
+
+        self.pc = mtvec & ~3;
     }
 };

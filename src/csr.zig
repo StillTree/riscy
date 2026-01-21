@@ -92,7 +92,7 @@ pub const Cause = enum(u64) {
     hardware_error = 19,
 };
 
-const MtvecMode = enum(u2) {
+pub const MtvecMode = enum(u2) {
     direct = 0b00,
     vectored = 0b01,
 };
