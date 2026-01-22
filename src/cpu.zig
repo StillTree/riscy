@@ -12,14 +12,16 @@ pub const CpuState = struct {
     reg: [32]i64,
     pc: u64,
     mem: [16384]u8,
+    mem_offset: u64,
     cur_priv: Priv,
     csr_state: csr.State,
 
-    pub fn init() CpuState {
+    pub fn init(mem_offset: u64) CpuState {
         return .{
             .reg = [_]i64{0} ** 32,
             .pc = 0,
             .mem = [_]u8{0} ** 16384,
+            .mem_offset = mem_offset,
             .cur_priv = .machine,
             .csr_state = csr.State.init(),
         };
@@ -311,37 +313,37 @@ pub const CpuState = struct {
         switch (inst.funct3) {
             // lb
             0b000 => {
-                const val: i8 = @bitCast(self.mem[addr]);
+                const val: i8 = @bitCast(self.mem[addr + self.mem_offset]);
                 self.setReg(inst.rd, val);
             },
             // lbu
             0b100 => {
-                const val: u64 = self.mem[addr];
+                const val: u64 = self.mem[addr + self.mem_offset];
                 self.setReg(inst.rd, @bitCast(val));
             },
             // lh
             0b001 => {
-                const val = std.mem.readInt(i16, self.mem[addr..][0..2], .little);
+                const val = std.mem.readInt(i16, self.mem[(addr + self.mem_offset)..][0..2], .little);
                 self.setReg(inst.rd, val);
             },
             // lhu
             0b101 => {
-                const val: u64 = std.mem.readInt(u16, self.mem[addr..][0..2], .little);
+                const val: u64 = std.mem.readInt(u16, self.mem[(addr + self.mem_offset)..][0..2], .little);
                 self.setReg(inst.rd, @bitCast(val));
             },
             // lw
             0b010 => {
-                const val = std.mem.readInt(i32, self.mem[addr..][0..4], .little);
+                const val = std.mem.readInt(i32, self.mem[(addr + self.mem_offset)..][0..4], .little);
                 self.setReg(inst.rd, val);
             },
             // lwu
             0b110 => {
-                const val: u64 = std.mem.readInt(u32, self.mem[addr..][0..4], .little);
+                const val: u64 = std.mem.readInt(u32, self.mem[(addr + self.mem_offset)..][0..4], .little);
                 self.setReg(inst.rd, @bitCast(val));
             },
             // ld
             0b011 => {
-                const val = std.mem.readInt(i64, self.mem[addr..][0..8], .little);
+                const val = std.mem.readInt(i64, self.mem[(addr + self.mem_offset)..][0..8], .little);
                 self.setReg(inst.rd, val);
             },
             else => return error.InvalidFunct3,
@@ -356,22 +358,22 @@ pub const CpuState = struct {
             // sb
             0b000 => {
                 const val: i8 = @truncate(self.reg[inst.rs2]);
-                self.mem[addr] = @bitCast(val);
+                self.mem[addr + self.mem_offset] = @bitCast(val);
             },
             // sh
             0b001 => {
                 const val: i16 = @truncate(self.reg[inst.rs2]);
-                std.mem.writeInt(i16, self.mem[addr..][0..2], val, .little);
+                std.mem.writeInt(i16, self.mem[(addr + self.mem_offset)..][0..2], val, .little);
             },
             // sw
             0b010 => {
                 const val: i32 = @truncate(self.reg[inst.rs2]);
-                std.mem.writeInt(i32, self.mem[addr..][0..4], val, .little);
+                std.mem.writeInt(i32, self.mem[(addr + self.mem_offset)..][0..4], val, .little);
             },
             // sd
             0b011 => {
                 const val: i64 = self.reg[inst.rs2];
-                std.mem.writeInt(i64, self.mem[addr..][0..8], val, .little);
+                std.mem.writeInt(i64, self.mem[(addr + self.mem_offset)..][0..8], val, .little);
             },
             else => return error.InvalidFunct3,
         }
@@ -517,9 +519,9 @@ pub const CpuState = struct {
     }
 
     pub fn step(self: *CpuState) !void {
-        if (self.pc + 4 > self.mem.len) return error.OutOfMemory;
+        if (self.pc + 4 > self.mem.len + self.mem_offset) return error.OutOfMemory;
 
-        const raw = std.mem.readInt(u32, self.mem[self.pc..][0..4], .little);
+        const raw = std.mem.readInt(u32, self.mem[(self.pc - self.mem_offset)..][0..4], .little);
 
         const inst = isa.decode(raw);
 
