@@ -111,6 +111,9 @@ pub const Addr = enum(u12) {
     pmpcfg0 = 0x3a0,
     pmpaddr0 = 0x3b0,
     mie = 0x304,
+    satp = 0x180,
+    medeleg = 0x302,
+    mideleg = 0x303,
 };
 
 pub const State = struct {
@@ -132,7 +135,7 @@ pub const State = struct {
 
     pub fn write(self: *State, csrAddr: Addr, val: u64) !void {
         switch (csrAddr) {
-            .misa => {},
+            .satp, .pmpaddr0, .pmpcfg0, .mie, .medeleg, .mideleg => {},
             .mstatus => self.status.write(val, cpu.Priv.machine),
             .mtvec => {
                 self.mtvec = val;
@@ -152,14 +155,13 @@ pub const State = struct {
 
     pub fn read(self: *State, csrAddr: Addr) !u64 {
         return switch (csrAddr) {
-            .misa => 0,
+            .misa, .mhartid, .satp => 0,
             .mstatus => self.status.read(cpu.Priv.machine),
             .mtvec => self.mtvec,
             .mcause => @intFromEnum(self.mcause),
             .mepc => self.mepc,
-            .mhartid => 0,
             .mnstatus => self.mnstatus,
-            else => error.CsrUnimplemented,
+            else => error.CsrReadUnimplemented,
         };
     }
 };

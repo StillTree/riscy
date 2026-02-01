@@ -74,8 +74,8 @@ pub const CpuState = struct {
             // slli
             0b001 => {
                 const shamt: u6 = @truncate(@as(u12, @bitCast(inst.imm)));
-                const val = self.reg[inst.rs1] << shamt;
-                self.setReg(inst.rd, val);
+                const val = @as(u64, @bitCast(self.reg[inst.rs1])) << shamt;
+                self.setReg(inst.rd, @bitCast(val));
             },
             0b101 => {
                 const shamt: u6 = @truncate(@as(u12, @bitCast(inst.imm)));
@@ -242,10 +242,11 @@ pub const CpuState = struct {
     }
 
     fn execOpcodeJal(self: *CpuState, inst: isa.FormatJ) !void {
-        const imm: i64 = @intCast(@as(i21, @bitCast((inst.imm_1_10 << 1) |
-            (@as(i21, inst.imm_11) << 11) |
-            (@as(i21, inst.imm_12_19) << 12) |
-            (@as(i21, inst.imm_20) << 20))));
+        const imm: i64 = @as(i21, @bitCast((@as(u21, inst.imm_1_10) << 1) |
+            (@as(u21, inst.imm_11) << 11) |
+            (@as(u21, inst.imm_12_19) << 12) |
+            (@as(u21, inst.imm_20) << 20)));
+
         const target: u64 = self.pc +% @as(u64, @bitCast(imm));
         self.setReg(inst.rd, @bitCast(self.pc + 4));
         // This is done to compensate for the main loop that always increments the program counter after executing an instruction
@@ -260,11 +261,11 @@ pub const CpuState = struct {
     }
 
     fn execOpcodeBranch(self: *CpuState, inst: isa.FormatB) !void {
-        const imm: i64 = @intCast(@as(i13, @bitCast((inst.imm_1_4 << 1) |
-            (@as(i13, inst.imm_5_10) << 5) |
-            (@as(i13, inst.imm_11) << 11) |
-            (@as(i13, inst.imm_12) << 12))));
-        const target: u64 = self.pc +% @as(u64, @bitCast(imm));
+        const imm: u64 = (@as(u13, inst.imm_1_4) << 1) |
+            (@as(u13, inst.imm_5_10) << 5) |
+            (@as(u13, inst.imm_11) << 11) |
+            (@as(u13, inst.imm_12) << 12);
+        const target: u64 = self.pc +% imm;
 
         switch (inst.funct3) {
             // beq
@@ -313,37 +314,37 @@ pub const CpuState = struct {
         switch (inst.funct3) {
             // lb
             0b000 => {
-                const val: i8 = @bitCast(self.mem[addr + self.mem_offset]);
+                const val: i8 = @bitCast(self.mem[addr - self.mem_offset]);
                 self.setReg(inst.rd, val);
             },
             // lbu
             0b100 => {
-                const val: u64 = self.mem[addr + self.mem_offset];
+                const val: u64 = self.mem[addr - self.mem_offset];
                 self.setReg(inst.rd, @bitCast(val));
             },
             // lh
             0b001 => {
-                const val = std.mem.readInt(i16, self.mem[(addr + self.mem_offset)..][0..2], .little);
+                const val = std.mem.readInt(i16, self.mem[(addr - self.mem_offset)..][0..2], .little);
                 self.setReg(inst.rd, val);
             },
             // lhu
             0b101 => {
-                const val: u64 = std.mem.readInt(u16, self.mem[(addr + self.mem_offset)..][0..2], .little);
+                const val: u64 = std.mem.readInt(u16, self.mem[(addr - self.mem_offset)..][0..2], .little);
                 self.setReg(inst.rd, @bitCast(val));
             },
             // lw
             0b010 => {
-                const val = std.mem.readInt(i32, self.mem[(addr + self.mem_offset)..][0..4], .little);
+                const val = std.mem.readInt(i32, self.mem[(addr - self.mem_offset)..][0..4], .little);
                 self.setReg(inst.rd, val);
             },
             // lwu
             0b110 => {
-                const val: u64 = std.mem.readInt(u32, self.mem[(addr + self.mem_offset)..][0..4], .little);
+                const val: u64 = std.mem.readInt(u32, self.mem[(addr - self.mem_offset)..][0..4], .little);
                 self.setReg(inst.rd, @bitCast(val));
             },
             // ld
             0b011 => {
-                const val = std.mem.readInt(i64, self.mem[(addr + self.mem_offset)..][0..8], .little);
+                const val = std.mem.readInt(i64, self.mem[(addr - self.mem_offset)..][0..8], .little);
                 self.setReg(inst.rd, val);
             },
             else => return error.InvalidFunct3,
@@ -358,22 +359,22 @@ pub const CpuState = struct {
             // sb
             0b000 => {
                 const val: i8 = @truncate(self.reg[inst.rs2]);
-                self.mem[addr + self.mem_offset] = @bitCast(val);
+                self.mem[addr - self.mem_offset] = @bitCast(val);
             },
             // sh
             0b001 => {
                 const val: i16 = @truncate(self.reg[inst.rs2]);
-                std.mem.writeInt(i16, self.mem[(addr + self.mem_offset)..][0..2], val, .little);
+                std.mem.writeInt(i16, self.mem[(addr - self.mem_offset)..][0..2], val, .little);
             },
             // sw
             0b010 => {
                 const val: i32 = @truncate(self.reg[inst.rs2]);
-                std.mem.writeInt(i32, self.mem[(addr + self.mem_offset)..][0..4], val, .little);
+                std.mem.writeInt(i32, self.mem[(addr - self.mem_offset)..][0..4], val, .little);
             },
             // sd
             0b011 => {
                 const val: i64 = self.reg[inst.rs2];
-                std.mem.writeInt(i64, self.mem[(addr + self.mem_offset)..][0..8], val, .little);
+                std.mem.writeInt(i64, self.mem[(addr - self.mem_offset)..][0..8], val, .little);
             },
             else => return error.InvalidFunct3,
         }
@@ -554,6 +555,6 @@ pub const CpuState = struct {
         if (mode == .vectored)
             return error.MtvecModeUnsupported;
 
-        self.pc = mtvec & ~@as(u64, 3);
+        self.pc = mtvec & ~@as(u64, 3) -% 4;
     }
 };

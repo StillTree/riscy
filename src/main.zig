@@ -36,7 +36,7 @@ pub fn main() !void {
 
     state.pc = elf_header.e_entry;
 
-    for (0..50) |i| {
+    for (0..100) |i| {
         try state.step();
         std.debug.print("{d} ", .{i});
     }
