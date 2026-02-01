@@ -106,6 +106,11 @@ pub const Addr = enum(u12) {
     mtval2 = 0x34b,
     misa = 0x301,
     mvendorid = 0xf11,
+    mhartid = 0xf14,
+    mnstatus = 0x744,
+    pmpcfg0 = 0x3a0,
+    pmpaddr0 = 0x3b0,
+    mie = 0x304,
 };
 
 pub const State = struct {
@@ -113,6 +118,7 @@ pub const State = struct {
     mcause: Cause,
     mepc: u64,
     mtvec: u64,
+    mnstatus: u64,
 
     pub fn init() State {
         return .{
@@ -120,6 +126,7 @@ pub const State = struct {
             .mcause = .hardware_error,
             .mepc = 0,
             .mtvec = 0,
+            .mnstatus = 0,
         };
     }
 
@@ -136,7 +143,10 @@ pub const State = struct {
             .mepc => {
                 self.mepc = val;
             },
-            else => return error.CsrUnimplemented,
+            .mnstatus => {
+                self.mnstatus = val;
+            },
+            else => return error.CsrWriteUnimplemented,
         }
     }
 
@@ -147,6 +157,8 @@ pub const State = struct {
             .mtvec => self.mtvec,
             .mcause => @intFromEnum(self.mcause),
             .mepc => self.mepc,
+            .mhartid => 0,
+            .mnstatus => self.mnstatus,
             else => error.CsrUnimplemented,
         };
     }
