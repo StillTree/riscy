@@ -1,6 +1,7 @@
 const std = @import("std");
 const isa = @import("instructions.zig");
 const csr = @import("csr.zig");
+const mem = @import("mem_bus.zig");
 
 pub const Priv = enum(u2) {
     user = 0b00,
@@ -11,17 +12,15 @@ pub const Priv = enum(u2) {
 pub const CpuState = struct {
     reg: [32]i64,
     pc: u64,
-    mem: [16384]u8,
-    mem_offset: u64,
+    mem_bus: mem.Bus,
     cur_priv: Priv,
     csr_state: csr.State,
 
-    pub fn init(mem_offset: u64) CpuState {
+    pub fn init(alloc: std.mem.Allocator) CpuState {
         return .{
             .reg = [_]i64{0} ** 32,
             .pc = 0,
-            .mem = [_]u8{0} ** 16384,
-            .mem_offset = mem_offset,
+            .mem_bus = mem.Bus.init(alloc),
             .cur_priv = .machine,
             .csr_state = csr.State.init(),
         };
@@ -314,37 +313,37 @@ pub const CpuState = struct {
         switch (inst.funct3) {
             // lb
             0b000 => {
-                const val: i8 = @bitCast(self.mem[addr - self.mem_offset]);
+                const val: i8 = @bitCast(try self.mem_bus.load(u8, addr));
                 self.setReg(inst.rd, val);
             },
             // lbu
             0b100 => {
-                const val: u64 = self.mem[addr - self.mem_offset];
+                const val: u64 = try self.mem_bus.load(u8, addr);
                 self.setReg(inst.rd, @bitCast(val));
             },
             // lh
             0b001 => {
-                const val = std.mem.readInt(i16, self.mem[(addr - self.mem_offset)..][0..2], .little);
+                const val: i16 = @bitCast(try self.mem_bus.load(u16, addr));
                 self.setReg(inst.rd, val);
             },
             // lhu
             0b101 => {
-                const val: u64 = std.mem.readInt(u16, self.mem[(addr - self.mem_offset)..][0..2], .little);
+                const val: u64 = try self.mem_bus.load(u16, addr);
                 self.setReg(inst.rd, @bitCast(val));
             },
             // lw
             0b010 => {
-                const val = std.mem.readInt(i32, self.mem[(addr - self.mem_offset)..][0..4], .little);
+                const val: i32 = @bitCast(try self.mem_bus.load(u32, addr));
                 self.setReg(inst.rd, val);
             },
             // lwu
             0b110 => {
-                const val: u64 = std.mem.readInt(u32, self.mem[(addr - self.mem_offset)..][0..4], .little);
+                const val: u64 = try self.mem_bus.load(u32, addr);
                 self.setReg(inst.rd, @bitCast(val));
             },
             // ld
             0b011 => {
-                const val = std.mem.readInt(i64, self.mem[(addr - self.mem_offset)..][0..8], .little);
+                const val: i64 = @bitCast(try self.mem_bus.load(u64, addr));
                 self.setReg(inst.rd, val);
             },
             else => return error.InvalidFunct3,
@@ -359,22 +358,22 @@ pub const CpuState = struct {
             // sb
             0b000 => {
                 const val: i8 = @truncate(self.reg[inst.rs2]);
-                self.mem[addr - self.mem_offset] = @bitCast(val);
+                try self.mem_bus.store(u8, addr, @bitCast(val));
             },
             // sh
             0b001 => {
                 const val: i16 = @truncate(self.reg[inst.rs2]);
-                std.mem.writeInt(i16, self.mem[(addr - self.mem_offset)..][0..2], val, .little);
+                try self.mem_bus.store(u16, addr, @bitCast(val));
             },
             // sw
             0b010 => {
                 const val: i32 = @truncate(self.reg[inst.rs2]);
-                std.mem.writeInt(i32, self.mem[(addr - self.mem_offset)..][0..4], val, .little);
+                try self.mem_bus.store(u32, addr, @bitCast(val));
             },
             // sd
             0b011 => {
                 const val: i64 = self.reg[inst.rs2];
-                std.mem.writeInt(i64, self.mem[(addr - self.mem_offset)..][0..8], val, .little);
+                try self.mem_bus.store(u64, addr, @bitCast(val));
             },
             else => return error.InvalidFunct3,
         }
@@ -520,9 +519,9 @@ pub const CpuState = struct {
     }
 
     pub fn step(self: *CpuState) !void {
-        if (self.pc + 4 > self.mem.len + self.mem_offset) return error.OutOfMemory;
+        // if (self.pc + 4 > self.mem.len + self.mem_offset) return error.OutOfMemory;
 
-        const raw = std.mem.readInt(u32, self.mem[(self.pc - self.mem_offset)..][0..4], .little);
+        const raw = try self.mem_bus.load(u32, self.pc);
 
         const inst = isa.decode(raw);
 

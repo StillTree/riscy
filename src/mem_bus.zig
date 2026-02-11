@@ -87,45 +87,6 @@ pub const Bus = struct {
         try self.handlers.append(self.alloc, handler);
     }
 
-    // pub fn load8(self: *Bus, addr: u64) !u8 {
-    //     const handler = try self.getHandler(addr);
-
-    //     return try handler.load8(addr - handler.base);
-    // }
-
-    // pub fn load16(self: *Bus, addr: u64) !u16 {
-    //     const handler = try self.getHandler(addr);
-
-    //     if (addr > handler.base + handler.size - 2)
-    //         return error.CrossBoundryMemAccess;
-    //     if (addr % 2 != 0)
-    //         return error.UnalignedMemAccess;
-
-    //     return try handler.load16(addr - handler.base);
-    // }
-
-    // pub fn load32(self: *Bus, addr: u64) !u32 {
-    //     const handler = try self.getHandler(addr);
-
-    //     if (addr > handler.base + handler.size - 4)
-    //         return error.CrossBoundryMemAccess;
-    //     if (addr % 4 != 0)
-    //         return error.UnalignedMemAccess;
-
-    //     return try handler.load32(addr - handler.base);
-    // }
-
-    // pub fn load64(self: *Bus, addr: u64) !u64 {
-    //     const handler = try self.getHandler(addr);
-
-    //     if (addr > handler.base + handler.size - 8)
-    //         return error.CrossBoundryMemAccess;
-    //     if (addr % 8 != 0)
-    //         return error.UnalignedMemAccess;
-
-    //     return try handler.load64(addr - handler.base);
-    // }
-
     pub fn load(self: *Bus, comptime T: type, addr: u64) !T {
         const handler = try self.getHandler(addr);
         const size = @sizeOf(T);
@@ -143,45 +104,6 @@ pub const Bus = struct {
             else => @compileError("Unsupported type"),
         };
     }
-
-    // pub fn store8(self: *Bus, addr: u64, val: u8) !void {
-    //     const handler = try self.getHandler(addr);
-
-    //     try handler.store8(addr - handler.base, val);
-    // }
-
-    // pub fn store16(self: *Bus, addr: u64, val: u16) !void {
-    //     const handler = try self.getHandler(addr);
-
-    //     if (addr > handler.base + handler.size - 2)
-    //         return error.CrossBoundryMemAccess;
-    //     if (addr % 2 != 0)
-    //         return error.UnalignedMemAccess;
-
-    //     try handler.store16(addr - handler.base, val);
-    // }
-
-    // pub fn store32(self: *Bus, addr: u64, val: u32) !void {
-    //     const handler = try self.getHandler(addr);
-
-    //     if (addr > handler.base + handler.size - 4)
-    //         return error.CrossBoundryMemAccess;
-    //     if (addr % 4 != 0)
-    //         return error.UnalignedMemAccess;
-
-    //     try handler.store32(addr - handler.base, val);
-    // }
-
-    // pub fn store64(self: *Bus, addr: u64, val: u64) !void {
-    //     const handler = try self.getHandler(addr);
-
-    //     if (addr > handler.base + handler.size - 8)
-    //         return error.CrossBoundryMemAccess;
-    //     if (addr % 8 != 0)
-    //         return error.UnalignedMemAccess;
-
-    //     try handler.store64(addr - handler.base, val);
-    // }
 
     pub fn store(self: *Bus, comptime T: type, addr: u64, val: T) !void {
         const handler = try self.getHandler(addr);

@@ -1,15 +1,16 @@
 const std = @import("std");
 const riscv = @import("riscv_core");
-const mem = @import("mem_bus.zig");
-const r = @import("devices/ram.zig");
 
 pub fn main() !void {
-    const offset = 0x80000000;
-
-    var state = riscv.CpuState.init(offset);
-
     var arena: std.heap.ArenaAllocator = .init(std.heap.page_allocator);
     defer arena.deinit();
+
+    var ram = try riscv.Ram.init(arena.allocator(), 16384);
+    defer ram.deinit();
+
+    var state = riscv.CpuState.init(arena.allocator());
+
+    try state.mem_bus.register(ram.memHandler(0x80000000));
 
     const file = try std.fs.cwd().readFileAlloc(arena.allocator(), "../riscv-tests/isa/rv64ui-p-addi", 10320);
     std.debug.print("{d}\n", .{file.len});
@@ -23,17 +24,21 @@ pub fn main() !void {
     const prog_headers_ptr: [*]std.elf.Elf64_Phdr = @ptrFromInt(@intFromPtr(file.ptr) + elf_header.e_phoff);
     const prog_headers = prog_headers_ptr[0..elf_header.e_phnum];
 
-    for (prog_headers, 0..) |prog_header, i| {
+    for (prog_headers) |prog_header| {
         if (prog_header.p_type != std.elf.PT_LOAD)
             continue;
 
-        std.debug.print("Loaded section at i: {d}\n", .{i});
-
         const section_ptr: [*]u8 = @ptrFromInt(@intFromPtr(file.ptr) + prog_header.p_offset);
-        const addr = prog_header.p_vaddr - offset;
+        const addr = prog_header.p_vaddr;
 
-        @memset(state.mem[addr..(addr + prog_header.p_memsz)], 0);
-        @memcpy(state.mem[addr..(addr + prog_header.p_filesz)], section_ptr[0..prog_header.p_filesz]);
+        // @memset(state.mem[addr..(addr + prog_header.p_memsz)], 0);
+        for (addr..(addr + prog_header.p_memsz)) |i| {
+            try state.mem_bus.store(u8, i, 0);
+        }
+        // @memcpy(state.mem[addr..(addr + prog_header.p_filesz)], section_ptr[0..prog_header.p_filesz]);
+        for (addr..(addr + prog_header.p_filesz)) |i| {
+            try state.mem_bus.store(u8, i, section_ptr[i - addr]);
+        }
     }
 
     state.pc = elf_header.e_entry;
@@ -44,15 +49,6 @@ pub fn main() !void {
     }
 
     state.printRegisters();
-
-    var nice = mem.Bus.init(arena.allocator());
-    defer nice.deinit();
-
-    var ram = try r.Ram.init(arena.allocator(), 1024);
-
-    try nice.register(ram.memHandler(0));
-
-    _ = try nice.load(u8, 69);
 
     // const prog = comptime block: {
     //     const addi = a.assemble("addi x5, x0, 10");
