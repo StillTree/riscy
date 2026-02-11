@@ -1,5 +1,7 @@
 const std = @import("std");
 const riscv = @import("riscv_core");
+const mem = @import("mem_bus.zig");
+const r = @import("devices/ram.zig");
 
 pub fn main() !void {
     const offset = 0x80000000;
@@ -42,6 +44,15 @@ pub fn main() !void {
     }
 
     state.printRegisters();
+
+    var nice = mem.Bus.init(arena.allocator());
+    defer nice.deinit();
+
+    var ram = try r.Ram.init(arena.allocator(), 1024);
+
+    try nice.register(ram.memHandler(0));
+
+    _ = try nice.load(u8, 69);
 
     // const prog = comptime block: {
     //     const addi = a.assemble("addi x5, x0, 10");
