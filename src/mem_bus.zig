@@ -2,8 +2,10 @@ const std = @import("std");
 
 /// MemHandlers must outlive the memory bus.
 pub const Handler = struct {
-    base: u64,
-    size: u64,
+    /// Inclusive.
+    start: u64,
+    /// Exclusive.
+    end: u64,
     ptr: *anyopaque,
     vtable: *const VTable,
 
@@ -55,21 +57,11 @@ pub const Handler = struct {
 pub const Bus = struct {
     handlers: std.ArrayList(Handler),
     alloc: std.mem.Allocator,
-    cache: [CACHE_LEN]CacheEntry,
-
-    const CACHE_LEN = 1024;
-    const CACHE_MASK = CACHE_LEN - 1;
-
-    const CacheEntry = struct {
-        pfn: u64,
-        handlerIndex: usize,
-    };
 
     pub fn init(alloc: std.mem.Allocator) Bus {
         return .{
             .handlers = .empty,
             .alloc = alloc,
-            .cache = [_]CacheEntry{.{ .pfn = std.math.maxInt(u64), .handlerIndex = std.math.maxInt(usize) }} ** CACHE_LEN,
         };
     }
 
@@ -77,9 +69,12 @@ pub const Bus = struct {
         self.handlers.deinit(self.alloc);
     }
 
+    /// Every registration needs to be strictly in order.
     pub fn register(self: *Bus, handler: Handler) !void {
-        for (self.handlers.items) |*h| {
-            if (handler.base < h.base + h.size and handler.base + handler.size > h.base) {
+        const lastHandler = self.handlers.getLastOrNull();
+
+        if (lastHandler) |h| {
+            if (handler.start < h.end) {
                 return error.MemHandlerOverlap;
             }
         }
@@ -91,16 +86,16 @@ pub const Bus = struct {
         const handler = try self.getHandler(addr);
         const size = @sizeOf(T);
 
-        if (addr > handler.base + handler.size - size)
+        if (addr > handler.end - size)
             return error.CrossBoundryMemAccess;
         if (addr % size != 0)
             return error.UnalignedMemAccess;
 
         return switch (T) {
-            u8 => handler.load8(addr - handler.base),
-            u16 => handler.load16(addr - handler.base),
-            u32 => handler.load32(addr - handler.base),
-            u64 => handler.load64(addr - handler.base),
+            u8 => handler.load8(addr - handler.start),
+            u16 => handler.load16(addr - handler.start),
+            u32 => handler.load32(addr - handler.start),
+            u64 => handler.load64(addr - handler.start),
             else => @compileError("Unsupported type"),
         };
     }
@@ -109,40 +104,43 @@ pub const Bus = struct {
         const handler = try self.getHandler(addr);
         const size = @sizeOf(T);
 
-        if (addr > handler.base + handler.size - size)
+        if (addr > handler.end - size)
             return error.CrossBoundryMemAccess;
         if (addr % size != 0)
             return error.UnalignedMemAccess;
 
         switch (T) {
-            u8 => handler.store8(addr - handler.base, val),
-            u16 => handler.store16(addr - handler.base, val),
-            u32 => handler.store32(addr - handler.base, val),
-            u64 => handler.store64(addr - handler.base, val),
+            u8 => handler.store8(addr - handler.start, val),
+            u16 => handler.store16(addr - handler.start, val),
+            u32 => handler.store32(addr - handler.start, val),
+            u64 => handler.store64(addr - handler.start, val),
             else => @compileError("Unsupported type"),
         }
     }
 
     fn getHandler(self: *Bus, addr: u64) !*Handler {
-        const pfn = addr >> 12;
-        const masked_pfn = pfn & CACHE_MASK;
+        var left: usize = 0;
+        var right: usize = self.handlers.items.len;
 
-        if (self.cache[masked_pfn].pfn == pfn) {
-            const i = self.cache[masked_pfn].handlerIndex;
-            // In theory this should always be true
-            std.debug.assert(i < self.handlers.items.len);
-            return &self.handlers.items[i];
-        }
+        while (left < right) {
+            const mid = left + (right - left) / 2;
+            const h = &self.handlers.items[mid];
 
-        for (self.handlers.items, 0..) |*h, i| {
-            if (addr >= h.base and addr < h.base + h.size) {
-                self.cache[masked_pfn].handlerIndex = i;
-                self.cache[masked_pfn].pfn = pfn;
-
-                return h;
+            if (addr < h.start) {
+                right = mid;
+            } else {
+                left = mid + 1;
             }
         }
 
-        return error.NoHandlerInMemRegion;
+        if (left == 0)
+            return error.NoHandlerInMemRegion;
+
+        const candidate = &self.handlers.items[left - 1];
+
+        if (addr >= candidate.end)
+            return error.NoHandlerInMemRegion;
+
+        return candidate;
     }
 };

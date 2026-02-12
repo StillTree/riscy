@@ -66,7 +66,7 @@ pub const Ram = struct {
         std.mem.writeInt(u64, self.mem[addr..][0..8], val, .little);
     }
 
-    pub fn memHandler(self: *Ram, base: u64) mem.Handler {
+    pub fn memHandler(self: *Ram, start: u64) mem.Handler {
         return .{
             .ptr = self,
             .vtable = &.{
@@ -79,8 +79,8 @@ pub const Ram = struct {
                 .store32 = store32,
                 .store64 = store64,
             },
-            .base = base,
-            .size = self.mem.len,
+            .start = start,
+            .end = start + self.mem.len,
         };
     }
 };
