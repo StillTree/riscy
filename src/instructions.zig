@@ -29,6 +29,8 @@ pub const Instruction = union(enum) {
     unknown: u32,
 };
 
+// TODO: Consider storing all immediates as signed values
+
 pub const FormatI = struct {
     opcode: Opcode,
     rd: Reg,

@@ -260,11 +260,11 @@ pub const CpuState = struct {
     }
 
     fn execOpcodeBranch(self: *CpuState, inst: isa.FormatB) !void {
-        const imm: u64 = (@as(u13, inst.imm_1_4) << 1) |
+        const imm: i64 = @as(i13, @bitCast((@as(u13, inst.imm_1_4) << 1) |
             (@as(u13, inst.imm_5_10) << 5) |
             (@as(u13, inst.imm_11) << 11) |
-            (@as(u13, inst.imm_12) << 12);
-        const target: u64 = self.pc +% imm;
+            (@as(u13, inst.imm_12) << 12)));
+        const target: u64 = self.pc +% @as(u64, @bitCast(imm));
 
         switch (inst.funct3) {
             // beq

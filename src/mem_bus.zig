@@ -58,6 +58,9 @@ pub const Bus = struct {
     handlers: std.ArrayList(Handler),
     alloc: std.mem.Allocator,
 
+    // TODO: Consider changing it so RAM is the default and there is some sort of a fast path for it,
+    // the devices will function the same way
+
     pub fn init(alloc: std.mem.Allocator) Bus {
         return .{
             .handlers = .empty,
