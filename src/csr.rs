@@ -52,10 +52,55 @@ impl MStatus {
     }
 }
 
+mod addr {
+    pub const MSTATUS: u16 = 0x300;
+    pub const MTVEC: u16 = 0x305;
+    pub const MEPC: u16 = 0x341;
+    pub const MCAUSE: u16 = 0x342;
+    pub const MTVAL: u16 = 0x343;
+    pub const MTVAL2: u16 = 0x34b;
+    pub const MISA: u16 = 0x301;
+    pub const MVENDORID: u16 = 0xf11;
+    pub const MHARTID: u16 = 0xf14;
+    pub const MNSTATUS: u16 = 0x744;
+    pub const PMPCFG0: u16 = 0x3a0;
+    pub const PMPADDR0: u16 = 0x3b0;
+    pub const MIE: u16 = 0x304;
+    pub const SATP: u16 = 0x180;
+    pub const MEDELEG: u16 = 0x302;
+    pub const MIDELEG: u16 = 0x303;
+}
+
 pub struct CsrState {
     mstatus: MStatus,
     mcause: u64,
     mepc: u64,
     mtvec: u64,
     mnstatus: u64,
+}
+
+impl CsrState {
+    pub fn write(&mut self, addr: u16, val: u64) {
+        match addr {
+            addr::SATP | addr::PMPADDR0 | addr::PMPCFG0 | addr::MIE | addr::MEDELEG | addr::MIDELEG => {}
+            addr::MSTATUS => self.mstatus.write_m(val),
+            addr::MTVEC => self.mtvec = val,
+            addr::MCAUSE => self.mcause = val,
+            addr::MEPC => self.mepc = val,
+            addr::MNSTATUS => self.mnstatus = val,
+            _ => panic!("Unknown csr addr"),
+        }
+    }
+
+    pub fn read(&self, addr: u16) -> u64 {
+        match addr {
+            addr::MSTATUS => self.mstatus.read_m(),
+            addr::MISA | addr::MHARTID | addr::SATP => 0,
+            addr::MTVEC => self.mtvec,
+            addr::MCAUSE => self.mcause,
+            addr::MEPC => self.mepc,
+            addr::MNSTATUS => self.mnstatus,
+            _ => panic!("Unknown csr addr"),
+        }
+    }
 }

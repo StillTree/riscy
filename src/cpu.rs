@@ -1,3 +1,9 @@
+pub enum PrivMode {
+    Machine = 0b11,
+    Supervisor = 0b01,
+    User = 0b00,
+}
+
 struct Cpu {
     mem: [u8; 4096],
     reg: [i64; 32],
@@ -25,6 +31,5 @@ impl Cpu {
         self.reg[reg]
     }
 
-    pub fn step(self: &mut Cpu) {
-    }
+    pub fn step(self: &mut Cpu) {}
 }
