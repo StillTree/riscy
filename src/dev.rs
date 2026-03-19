@@ -28,6 +28,14 @@ pub struct MemRegion {
     pub data: Box<[u8]>,
 }
 
+impl MemRegion {
+    pub fn new(start: u64, size: u64) -> Self {
+        let data = vec![0u8; size as usize].into_boxed_slice();
+
+        Self { start, size, data }
+    }
+}
+
 pub struct Bus {
     mem_regions: Vec<MemRegion>,
     mmio_devices: Vec<DevMapping>,
@@ -92,6 +100,7 @@ impl Bus {
     }
 
     fn find_mem_region_index(&self, addr: u64) -> Option<usize> {
+        // TODO: Cache
         self.mem_regions
             .binary_search_by(|reg| {
                 if addr < reg.start {
