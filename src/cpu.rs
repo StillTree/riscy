@@ -1,3 +1,8 @@
+pub enum Exception {
+    LoadAccessFault,
+    StoreAccessFault,
+}
+
 pub enum PrivMode {
     Machine = 0b11,
     Supervisor = 0b01,

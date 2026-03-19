@@ -3,7 +3,7 @@ use instructions::Inst;
 mod instructions;
 mod cpu;
 mod csr;
-mod bus;
+mod dev;
 
 fn main() {
     println!("Hello, world!");
