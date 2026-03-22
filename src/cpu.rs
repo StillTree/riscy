@@ -2,7 +2,7 @@ use crate::{
     csr::{self, CsrState},
     dev::Bus,
     exception::{Exception, TrapCause},
-    instructions::{EncodingB, EncodingI, EncodingIShifts, EncodingJ, EncodingR, EncodingS, EncodingU},
+    instructions::{BaseInst, EncodingB, EncodingI, EncodingIShifts, EncodingJ, EncodingR, EncodingS, EncodingU, Inst, ZicsrInst},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -49,10 +49,96 @@ impl Cpu {
         self.pc = self.csr.handle_trap_exit();
     }
 
-    pub fn step(self: &mut Cpu) {}
+    pub fn step(self: &mut Cpu) {
+        let prev_pc = self.pc;
+
+        let inst = match self.mem.load32(self.pc) {
+            Ok(inst) => Inst::decode(inst),
+            Err(_) => {
+                self.handle_trap(TrapCause::Exception(Exception::InstAccessFault));
+                return;
+            }
+        };
+
+        match self.exec_inst(inst) {
+            Err(e) => {
+                self.handle_trap(TrapCause::Exception(e));
+            }
+            Ok(_) => {
+                if prev_pc == self.pc {
+                    self.pc = self.pc.wrapping_add(4);
+                }
+            }
+        };
+    }
 }
 
 impl Cpu {
+    fn exec_inst(&mut self, inst: Inst) -> Result<(), Exception> {
+        match inst {
+            Inst::Base(base) => self.exec_base_inst(base),
+            Inst::Zicsr(zicsr) => self.exec_zicsr_inst(zicsr),
+        }
+    }
+
+    fn exec_base_inst(&mut self, inst: BaseInst) -> Result<(), Exception> {
+        match inst {
+            BaseInst::Addi(e) => Ok(self.addi(e)),
+            BaseInst::Slti(e) => Ok(self.slti(e)),
+            BaseInst::Sltiu(e) => Ok(self.sltiu(e)),
+            BaseInst::Xori(e) => Ok(self.xori(e)),
+            BaseInst::Ori(e) => Ok(self.ori(e)),
+            BaseInst::Andi(e) => Ok(self.andi(e)),
+            BaseInst::Slli(e) => Ok(self.slli(e)),
+            BaseInst::Srai(e) => Ok(self.srai(e)),
+            BaseInst::Srli(e) => Ok(self.srli(e)),
+            BaseInst::Addiw(e) => Ok(self.addiw(e)),
+            BaseInst::Slliw(e) => Ok(self.slliw(e)),
+            BaseInst::Sraiw(e) => Ok(self.sraiw(e)),
+            BaseInst::Srliw(e) => Ok(self.srliw(e)),
+            BaseInst::Lui(e) => Ok(self.lui(e)),
+            BaseInst::Auipc(e) => Ok(self.auipc(e)),
+            BaseInst::Add(e) => Ok(self.add(e)),
+            BaseInst::Sub(e) => Ok(self.sub(e)),
+            BaseInst::Slt(e) => Ok(self.slt(e)),
+            BaseInst::Sltu(e) => Ok(self.sltu(e)),
+            BaseInst::Xor(e) => Ok(self.xor(e)),
+            BaseInst::Or(e) => Ok(self.or(e)),
+            BaseInst::And(e) => Ok(self.and(e)),
+            BaseInst::Sll(e) => Ok(self.sll(e)),
+            BaseInst::Srl(e) => Ok(self.srl(e)),
+            BaseInst::Sra(e) => Ok(self.sra(e)),
+            BaseInst::Addw(e) => Ok(self.addw(e)),
+            BaseInst::Subw(e) => Ok(self.subw(e)),
+            BaseInst::Sllw(e) => Ok(self.sllw(e)),
+            BaseInst::Srlw(e) => Ok(self.srlw(e)),
+            BaseInst::Sraw(e) => Ok(self.sraw(e)),
+            BaseInst::Jal(e) => Ok(self.jal(e)),
+            BaseInst::Jalr(e) => Ok(self.jalr(e)),
+            BaseInst::Beq(e) => Ok(self.beq(e)),
+            BaseInst::Bne(e) => Ok(self.bne(e)),
+            BaseInst::Blt(e) => Ok(self.blt(e)),
+            BaseInst::Bge(e) => Ok(self.bge(e)),
+            BaseInst::Bltu(e) => Ok(self.bltu(e)),
+            BaseInst::Bgeu(e) => Ok(self.bgeu(e)),
+            BaseInst::Lb(e) => self.lb(e),
+            BaseInst::Lbu(e) => self.lbu(e),
+            BaseInst::Lh(e) => self.lh(e),
+            BaseInst::Lhu(e) => self.lhu(e),
+            BaseInst::Lw(e) => self.lw(e),
+            BaseInst::Lwu(e) => self.lwu(e),
+            BaseInst::Ld(e) => self.ld(e),
+            BaseInst::Sb(e) => self.sb(e),
+            BaseInst::Sh(e) => self.sh(e),
+            BaseInst::Sw(e) => self.sw(e),
+            BaseInst::Sd(e) => self.sd(e),
+            BaseInst::Fence(()) => Ok(()),
+            BaseInst::Ecall(e) => Ok(self.ecall(e)),
+            BaseInst::Ebreak(e) => Ok(self.ebreak(e)),
+            BaseInst::Mret(e) => Ok(self.mret(e)),
+        }
+    }
+
     fn addi(&mut self, inst: EncodingI) {
         let val = self.get_reg(inst.rs1).wrapping_add(inst.imm);
         self.set_reg(inst.rd, val);
@@ -352,6 +438,17 @@ impl Cpu {
 
     fn mret(&mut self, _: EncodingI) {
         self.handle_trap_exit();
+    }
+
+    fn exec_zicsr_inst(&mut self, zicsr: ZicsrInst) -> Result<(), Exception> {
+        match zicsr {
+            ZicsrInst::Csrrw(e) => Ok(self.csrrw(e)),
+            ZicsrInst::Csrrs(e) => Ok(self.csrrs(e)),
+            ZicsrInst::Csrrc(e) => Ok(self.csrrc(e)),
+            ZicsrInst::Csrrwi(e) => Ok(self.csrrwi(e)),
+            ZicsrInst::Csrrsi(e) => Ok(self.csrrsi(e)),
+            ZicsrInst::Csrrci(e) => Ok(self.csrrci(e)),
+        }
     }
 
     fn csrrw(&mut self, inst: EncodingI) {
