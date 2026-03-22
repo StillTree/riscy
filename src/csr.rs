@@ -1,20 +1,22 @@
+use crate::exception::TrapCause;
+
 pub struct MStatus {
     bits: u64,
 }
 
 impl MStatus {
-    pub const MIE_SHIFT: usize = 3;
-    pub const MPIE_SHIFT: usize = 7;
-    pub const MPP_SHIFT: usize = 11;
+    const MIE_SHIFT: usize = 3;
+    const MPIE_SHIFT: usize = 7;
+    const MPP_SHIFT: usize = 11;
 
-    pub const M_WRITE_MASK: u64 = (1 << Self::MIE_SHIFT) | (1 << Self::MPIE_SHIFT) | (3 << Self::MPP_SHIFT);
-    pub const M_READ_MASK: u64 = Self::M_WRITE_MASK;
+    const M_WRITE_MASK: u64 = (1 << Self::MIE_SHIFT) | (1 << Self::MPIE_SHIFT) | (3 << Self::MPP_SHIFT);
+    const M_READ_MASK: u64 = Self::M_WRITE_MASK;
 
-    pub fn mie(&self) -> bool {
+    fn mie(&self) -> bool {
         ((self.bits >> Self::MIE_SHIFT) & 1) != 0
     }
 
-    pub fn set_mie(&mut self, val: bool) {
+    fn set_mie(&mut self, val: bool) {
         if val {
             self.bits |= 1 << Self::MIE_SHIFT;
         } else {
@@ -22,11 +24,11 @@ impl MStatus {
         }
     }
 
-    pub fn mpie(&self) -> bool {
+    fn mpie(&self) -> bool {
         ((self.bits >> Self::MPIE_SHIFT) & 1) != 0
     }
 
-    pub fn set_mpie(&mut self, val: bool) {
+    fn set_mpie(&mut self, val: bool) {
         if val {
             self.bits |= 1 << Self::MPIE_SHIFT;
         } else {
@@ -34,11 +36,11 @@ impl MStatus {
         }
     }
 
-    pub fn mpp(&self) -> u8 {
+    fn mpp(&self) -> u8 {
         ((self.bits >> Self::MPIE_SHIFT) & 3) as u8
     }
 
-    pub fn set_mpp(&mut self, val: u8) {
+    fn set_mpp(&mut self, val: u8) {
         self.bits &= !(3 << Self::MPP_SHIFT);
         self.bits |= (val as u64 & 3) << Self::MPP_SHIFT;
     }
@@ -102,5 +104,30 @@ impl CsrState {
             addr::MNSTATUS => self.mnstatus,
             _ => panic!("Unknown csr addr"),
         }
+    }
+
+    pub fn handle_trap(&mut self, cause: TrapCause, cur_pc: u64) -> u64 {
+        // TODO: Finish this, it's obviously missing a lot
+        let mie = self.mstatus.mie();
+        self.mstatus.set_mpie(mie);
+        self.mstatus.set_mie(false);
+
+        self.mcause = cause.code();
+        self.mepc = cur_pc;
+
+        let mtvec = self.mtvec;
+        if (mtvec & 3) != 0 {
+            panic!();
+        }
+
+        mtvec & !3u64
+    }
+
+    pub fn handle_trap_exit(&mut self) -> u64 {
+        // TODO: Finish this
+        let mpie = self.mstatus.mpie();
+        self.mstatus.set_mie(mpie);
+
+        self.mepc
     }
 }

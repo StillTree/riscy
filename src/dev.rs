@@ -1,4 +1,4 @@
-use crate::cpu::Exception;
+use crate::{exception::Exception};
 
 pub mod ram;
 
@@ -64,7 +64,7 @@ impl Bus {
 
         // TODO: DevMappings
 
-        Err(Exception::StoreAccessFault)
+        Err(Exception::StoreAmoAccessFault)
     }
 
     pub fn load8(&self, addr: u64) -> Result<u8, Exception> {

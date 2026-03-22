@@ -1,35 +1,11 @@
 use crate::{
     csr::{self, CsrState},
     dev::Bus,
+    exception::{Exception, TrapCause},
     instructions::{EncodingB, EncodingI, EncodingIShifts, EncodingJ, EncodingR, EncodingS, EncodingU},
 };
 
-#[repr(u64)]
-pub enum TrapCause {
-    InstAddrMisalign = 0,
-    InstAccessFault = 1,
-    IllegalInst = 2,
-    Breakpoint = 3,
-    LoadAddrMisalign = 4,
-    LoadAccessFault = 5,
-    StoreAmoAddrMisalign = 6,
-    StoreAmoAccessFault = 7,
-    EcallFromUser = 8,
-    EcallFromSupervisor = 9,
-    EcallFromMachine = 11,
-    InstPageFault = 12,
-    LoadPageFault = 13,
-    StoreAmoPageFault = 15,
-    DoubleTrap = 16,
-    SoftwareCheck = 18,
-    HardwareError = 19,
-}
-
-pub enum Exception {
-    LoadAccessFault,
-    StoreAccessFault,
-}
-
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PrivMode {
     Machine = 0b11,
     Supervisor = 0b01,
@@ -65,22 +41,12 @@ impl Cpu {
         self.reg[reg as usize]
     }
 
-    fn trap(&mut self, cause: TrapCause) {
-        // TODO: Finish this, it's obviously missing a lot
-        let mie = (self.csr.read(csr::addr::MSTATUS) >> csr::MStatus::MIE_SHIFT) & 1;
-        let mstatus_masked = self.csr.read(csr::addr::MSTATUS) & !(1u64 << csr::MStatus::MPIE_SHIFT);
+    fn handle_trap(&mut self, cause: TrapCause) {
+        self.pc = self.csr.handle_trap(cause, self.pc);
+    }
 
-        let new_mstatus = mstatus_masked | (mie << csr::MStatus::MPIE_SHIFT);
-        self.csr.write(csr::addr::MSTATUS, new_mstatus);
-        self.csr.write(csr::addr::MCAUSE, cause as u64);
-        self.csr.write(csr::addr::MEPC, self.pc);
-
-        let mtvec = self.csr.read(csr::addr::MTVEC);
-        let mtvec_mode = mtvec & 3;
-        if mtvec_mode != 0 {
-            panic!();
-        }
-        self.pc = mtvec & !3u64;
+    fn handle_trap_exit(&mut self) {
+        self.pc = self.csr.handle_trap_exit();
     }
 
     pub fn step(self: &mut Cpu) {}
@@ -377,7 +343,7 @@ impl Cpu {
     }
 
     fn ecall(&mut self, _: EncodingI) {
-        self.trap(TrapCause::EcallFromMachine);
+        self.handle_trap(TrapCause::Exception(Exception::EcallFromMachine));
     }
 
     fn ebreak(&mut self, _: EncodingI) {
@@ -385,13 +351,7 @@ impl Cpu {
     }
 
     fn mret(&mut self, _: EncodingI) {
-        // TODO: Finish this
-        let mpie = (self.csr.read(csr::addr::MSTATUS) >> csr::MStatus::MPIE_SHIFT) & 1;
-        let mstatus_masked = self.csr.read(csr::addr::MSTATUS) & !(1u64 << csr::MStatus::MIE_SHIFT);
-
-        let new_mstatus = mstatus_masked | (mpie << csr::MStatus::MIE_SHIFT);
-        self.csr.write(csr::addr::MSTATUS, new_mstatus);
-        self.pc = self.csr.read(csr::addr::MEPC);
+        self.handle_trap_exit();
     }
 
     fn csrrw(&mut self, inst: EncodingI) {
