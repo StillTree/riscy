@@ -82,6 +82,18 @@ pub struct CsrState {
 }
 
 impl CsrState {
+    pub fn new() -> Self {
+        Self {
+            mstatus: MStatus {
+                bits: 0,
+            },
+            mepc: 0,
+            mcause: 0,
+            mtvec: 0,
+            mnstatus: 0,
+        }
+    }
+
     pub fn write(&mut self, addr: u16, val: u64) {
         match addr {
             addr::SATP | addr::PMPADDR0 | addr::PMPCFG0 | addr::MIE | addr::MEDELEG | addr::MIDELEG => {}

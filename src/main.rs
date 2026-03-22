@@ -1,11 +1,23 @@
-use instructions::Inst;
-
-mod instructions;
-mod cpu;
-mod csr;
-mod dev;
-mod exception;
+use riscy::{
+    bin_loader, cpu,
+    csr::CsrState,
+    dev::{Bus, MemRegion},
+};
 
 fn main() {
-    println!("Hello, world!");
+    let mut mem_bus = Bus {
+        mem_regions: vec![MemRegion::new(0x80000000, 0x4000)],
+        mmio_devices: vec![],
+    };
+
+    let bin_info = bin_loader::load_elf("../riscv-tests/isa/rv64ui-p-addi", &mut mem_bus).unwrap();
+
+    let csr_state = CsrState::new();
+
+    let mut cpu = cpu::Cpu::new(mem_bus, csr_state);
+    cpu.pc = bin_info.entry;
+
+    loop {
+        cpu.step();
+    }
 }

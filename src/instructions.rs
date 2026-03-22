@@ -1,3 +1,4 @@
+#[derive(Debug, PartialEq, Eq)]
 pub struct EncodingS {
     pub rs1: u8,
     pub rs2: u8,
@@ -20,6 +21,7 @@ impl EncodingS {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub struct EncodingB {
     pub rs1: u8,
     pub rs2: u8,
@@ -44,6 +46,7 @@ impl EncodingB {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub struct EncodingJ {
     pub rd: u8,
     pub imm: i64,
@@ -66,6 +69,7 @@ impl EncodingJ {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub struct EncodingI {
     pub rd: u8,
     pub rs1: u8,
@@ -82,6 +86,7 @@ impl EncodingI {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub struct EncodingIShifts {
     pub rd: u8,
     pub rs1: u8,
@@ -100,6 +105,7 @@ impl EncodingIShifts {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub struct EncodingU {
     pub rd: u8,
     pub imm: i64,
@@ -114,6 +120,7 @@ impl EncodingU {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub struct EncodingR {
     pub rd: u8,
     pub rs1: u8,
@@ -130,6 +137,7 @@ impl EncodingR {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub enum BaseInst {
     Addi(EncodingI),
     Slti(EncodingI),
@@ -186,6 +194,7 @@ pub enum BaseInst {
     Mret(EncodingI),
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub enum ZicsrInst {
     Csrrw(EncodingI),
     Csrrs(EncodingI),
@@ -195,6 +204,7 @@ pub enum ZicsrInst {
     Csrrci(EncodingI),
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub enum Inst {
     Base(BaseInst),
     Zicsr(ZicsrInst),

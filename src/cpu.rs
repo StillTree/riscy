@@ -1,5 +1,5 @@
 use crate::{
-    csr::{self, CsrState},
+    csr::CsrState,
     dev::Bus,
     exception::{Exception, TrapCause},
     instructions::{BaseInst, EncodingB, EncodingI, EncodingIShifts, EncodingJ, EncodingR, EncodingS, EncodingU, Inst, ZicsrInst},
@@ -12,11 +12,11 @@ pub enum PrivMode {
     User = 0b00,
 }
 
-struct Cpu {
+pub struct Cpu {
     mem: Bus,
     csr: CsrState,
     reg: [i64; 32],
-    pc: u64,
+    pub pc: u64,
 }
 
 impl Cpu {
@@ -59,6 +59,8 @@ impl Cpu {
                 return;
             }
         };
+
+        std::println!("Executing at {:x}: {:?}", self.pc, inst);
 
         match self.exec_inst(inst) {
             Err(e) => {

@@ -37,8 +37,8 @@ impl MemRegion {
 }
 
 pub struct Bus {
-    mem_regions: Vec<MemRegion>,
-    mmio_devices: Vec<DevMapping>,
+    pub mem_regions: Vec<MemRegion>,
+    pub mmio_devices: Vec<DevMapping>,
 }
 
 impl Bus {
