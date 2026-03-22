@@ -3,12 +3,12 @@ pub struct MStatus {
 }
 
 impl MStatus {
-    const MIE_SHIFT: usize = 3;
-    const MPIE_SHIFT: usize = 7;
-    const MPP_SHIFT: usize = 11;
+    pub const MIE_SHIFT: usize = 3;
+    pub const MPIE_SHIFT: usize = 7;
+    pub const MPP_SHIFT: usize = 11;
 
-    const M_WRITE_MASK: u64 = (1 << Self::MIE_SHIFT) | (1 << Self::MPIE_SHIFT) | (3 << Self::MPP_SHIFT);
-    const M_READ_MASK: u64 = Self::M_WRITE_MASK;
+    pub const M_WRITE_MASK: u64 = (1 << Self::MIE_SHIFT) | (1 << Self::MPIE_SHIFT) | (3 << Self::MPP_SHIFT);
+    pub const M_READ_MASK: u64 = Self::M_WRITE_MASK;
 
     pub fn mie(&self) -> bool {
         ((self.bits >> Self::MIE_SHIFT) & 1) != 0
@@ -52,7 +52,7 @@ impl MStatus {
     }
 }
 
-mod addr {
+pub mod addr {
     pub const MSTATUS: u16 = 0x300;
     pub const MTVEC: u16 = 0x305;
     pub const MEPC: u16 = 0x341;

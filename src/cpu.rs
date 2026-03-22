@@ -1,8 +1,29 @@
 use crate::{
-    csr::CsrState,
+    csr::{self, CsrState},
     dev::Bus,
     instructions::{EncodingB, EncodingI, EncodingIShifts, EncodingJ, EncodingR, EncodingS, EncodingU},
 };
+
+#[repr(u64)]
+pub enum TrapCause {
+    InstAddrMisalign = 0,
+    InstAccessFault = 1,
+    IllegalInst = 2,
+    Breakpoint = 3,
+    LoadAddrMisalign = 4,
+    LoadAccessFault = 5,
+    StoreAmoAddrMisalign = 6,
+    StoreAmoAccessFault = 7,
+    EcallFromUser = 8,
+    EcallFromSupervisor = 9,
+    EcallFromMachine = 11,
+    InstPageFault = 12,
+    LoadPageFault = 13,
+    StoreAmoPageFault = 15,
+    DoubleTrap = 16,
+    SoftwareCheck = 18,
+    HardwareError = 19,
+}
 
 pub enum Exception {
     LoadAccessFault,
@@ -32,7 +53,7 @@ impl Cpu {
         }
     }
 
-    fn set_reg(self: &mut Cpu, reg: u8, val: i64) {
+    fn set_reg(&mut self, reg: u8, val: i64) {
         if reg == 0 {
             return;
         }
@@ -40,8 +61,26 @@ impl Cpu {
         self.reg[reg as usize] = val;
     }
 
-    fn get_reg(self: &Cpu, reg: u8) -> i64 {
+    fn get_reg(&self, reg: u8) -> i64 {
         self.reg[reg as usize]
+    }
+
+    fn trap(&mut self, cause: TrapCause) {
+        // TODO: Finish this, it's obviously missing a lot
+        let mie = (self.csr.read(csr::addr::MSTATUS) >> csr::MStatus::MIE_SHIFT) & 1;
+        let mstatus_masked = self.csr.read(csr::addr::MSTATUS) & !(1u64 << csr::MStatus::MPIE_SHIFT);
+
+        let new_mstatus = mstatus_masked | (mie << csr::MStatus::MPIE_SHIFT);
+        self.csr.write(csr::addr::MSTATUS, new_mstatus);
+        self.csr.write(csr::addr::MCAUSE, cause as u64);
+        self.csr.write(csr::addr::MEPC, self.pc);
+
+        let mtvec = self.csr.read(csr::addr::MTVEC);
+        let mtvec_mode = mtvec & 3;
+        if mtvec_mode != 0 {
+            panic!();
+        }
+        self.pc = mtvec & !3u64;
     }
 
     pub fn step(self: &mut Cpu) {}
@@ -200,7 +239,7 @@ impl Cpu {
     }
 
     fn jalr(&mut self, inst: EncodingI) {
-        let target = (self.get_reg(inst.rs1).wrapping_add(inst.imm) as u64) & !(1 as u64);
+        let target = (self.get_reg(inst.rs1).wrapping_add(inst.imm) as u64) & !1u64;
         self.set_reg(inst.rd, self.pc.wrapping_add(4) as i64);
         self.pc = target;
     }
@@ -337,16 +376,22 @@ impl Cpu {
         self.mem.store64(addr, val)
     }
 
-    fn ecall(&mut self, inst: EncodingI) {
-        unimplemented!();
+    fn ecall(&mut self, _: EncodingI) {
+        self.trap(TrapCause::EcallFromMachine);
     }
 
-    fn ebreak(&mut self, inst: EncodingI) {
+    fn ebreak(&mut self, _: EncodingI) {
         panic!("EBREAK");
     }
 
-    fn mret(&mut self, inst: EncodingI) {
-        unimplemented!();
+    fn mret(&mut self, _: EncodingI) {
+        // TODO: Finish this
+        let mpie = (self.csr.read(csr::addr::MSTATUS) >> csr::MStatus::MPIE_SHIFT) & 1;
+        let mstatus_masked = self.csr.read(csr::addr::MSTATUS) & !(1u64 << csr::MStatus::MIE_SHIFT);
+
+        let new_mstatus = mstatus_masked | (mpie << csr::MStatus::MIE_SHIFT);
+        self.csr.write(csr::addr::MSTATUS, new_mstatus);
+        self.pc = self.csr.read(csr::addr::MEPC);
     }
 
     fn csrrw(&mut self, inst: EncodingI) {
