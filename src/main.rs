@@ -6,8 +6,7 @@ use riscy::{
 
 fn main() {
     let mut mem_bus = Bus {
-        mem_regions: vec![MemRegion::new(0x80000000, 0x4000)],
-        mmio_devices: vec![],
+        regions: vec![MemRegion::new_ram(0x80000000, 0x4000)],
     };
 
     let bin_info = bin_loader::load_elf("../riscv-tests/isa/rv64ui-p-addi", &mut mem_bus).unwrap();
