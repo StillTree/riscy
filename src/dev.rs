@@ -3,8 +3,8 @@ use crate::exception::Exception;
 pub mod ram;
 
 pub trait MmioDev {
-    fn load(&mut self, addr: u64, size: usize) -> u64;
-    fn store(&mut self, addr: u64, size: usize, val: u64);
+    fn load(&mut self, addr: u64, size: usize) -> Result<u64, Exception>;
+    fn store(&mut self, addr: u64, size: usize, val: u64) -> Result<(), Exception>;
 }
 
 pub enum MemRegionKind {
@@ -47,7 +47,7 @@ impl Bus {
                     buf[..N].copy_from_slice(&data[i..i + N]);
                     Ok(u64::from_le_bytes(buf))
                 }
-                MemRegionKind::Mmio(dev) => Ok(dev.load(i as u64, N)),
+                MemRegionKind::Mmio(dev) => Ok(dev.load(i as u64, N))?,
             }
         } else {
             Err(Exception::LoadAccessFault)
@@ -59,8 +59,8 @@ impl Bus {
             let i = (addr - reg.start) as usize;
 
             match &mut reg.kind {
-                MemRegionKind::Ram(data) => data[i..i + N].copy_from_slice(&u64::to_le_bytes(val)[..N]),
-                MemRegionKind::Mmio(dev) => dev.store(i as u64, N, val),
+                MemRegionKind::Ram(data) => data[i..i + N].copy_from_slice(&val.to_le_bytes()[..N]),
+                MemRegionKind::Mmio(dev) => dev.store(i as u64, N, val)?,
             }
 
             return Ok(());
