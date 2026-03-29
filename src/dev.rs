@@ -1,7 +1,5 @@
 use crate::exception::Exception;
 
-pub mod ram;
-
 pub trait MmioDev {
     fn load(&mut self, addr: u64, size: usize) -> Result<u64, Exception>;
     fn store(&mut self, addr: u64, size: usize, val: u64) -> Result<(), Exception>;
