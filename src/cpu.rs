@@ -13,20 +13,14 @@ pub enum PrivMode {
 }
 
 pub struct Cpu {
-    mem: Bus,
     csr: CsrState,
     reg: [i64; 32],
     pub pc: u64,
 }
 
 impl Cpu {
-    pub fn new(mem: Bus, csr: CsrState) -> Self {
-        Cpu {
-            reg: [0; 32],
-            mem,
-            csr,
-            pc: 0,
-        }
+    pub fn new(csr: CsrState) -> Self {
+        Cpu { reg: [0; 32], csr, pc: 0 }
     }
 
     fn set_reg(&mut self, reg: u8, val: i64) {
@@ -49,10 +43,10 @@ impl Cpu {
         self.pc = self.csr.handle_trap_exit();
     }
 
-    pub fn step(self: &mut Cpu) {
+    pub fn step(self: &mut Cpu, mem: &mut Bus) {
         let prev_pc = self.pc;
 
-        let inst = match self.mem.load32(self.pc) {
+        let inst = match mem.load32(self.pc) {
             Ok(inst) => Inst::decode(inst),
             Err(_) => {
                 self.handle_trap(TrapCause::Exception(Exception::InstAccessFault));
@@ -62,7 +56,7 @@ impl Cpu {
 
         std::println!("Executing at {:x}: {:?}", self.pc, inst);
 
-        match self.exec_inst(inst) {
+        match self.exec_inst(inst, mem) {
             Err(e) => {
                 self.handle_trap(TrapCause::Exception(e));
             }
@@ -76,14 +70,14 @@ impl Cpu {
 }
 
 impl Cpu {
-    fn exec_inst(&mut self, inst: Inst) -> Result<(), Exception> {
+    fn exec_inst(&mut self, inst: Inst, mem: &mut Bus) -> Result<(), Exception> {
         match inst {
-            Inst::Base(base) => self.exec_base_inst(base),
+            Inst::Base(base) => self.exec_base_inst(base, mem),
             Inst::Zicsr(zicsr) => self.exec_zicsr_inst(zicsr),
         }
     }
 
-    fn exec_base_inst(&mut self, inst: BaseInst) -> Result<(), Exception> {
+    fn exec_base_inst(&mut self, inst: BaseInst, mem: &mut Bus) -> Result<(), Exception> {
         match inst {
             BaseInst::Addi(e) => Ok(self.addi(e)),
             BaseInst::Slti(e) => Ok(self.slti(e)),
@@ -123,17 +117,17 @@ impl Cpu {
             BaseInst::Bge(e) => Ok(self.bge(e)),
             BaseInst::Bltu(e) => Ok(self.bltu(e)),
             BaseInst::Bgeu(e) => Ok(self.bgeu(e)),
-            BaseInst::Lb(e) => self.lb(e),
-            BaseInst::Lbu(e) => self.lbu(e),
-            BaseInst::Lh(e) => self.lh(e),
-            BaseInst::Lhu(e) => self.lhu(e),
-            BaseInst::Lw(e) => self.lw(e),
-            BaseInst::Lwu(e) => self.lwu(e),
-            BaseInst::Ld(e) => self.ld(e),
-            BaseInst::Sb(e) => self.sb(e),
-            BaseInst::Sh(e) => self.sh(e),
-            BaseInst::Sw(e) => self.sw(e),
-            BaseInst::Sd(e) => self.sd(e),
+            BaseInst::Lb(e) => self.lb(e, mem),
+            BaseInst::Lbu(e) => self.lbu(e, mem),
+            BaseInst::Lh(e) => self.lh(e, mem),
+            BaseInst::Lhu(e) => self.lhu(e, mem),
+            BaseInst::Lw(e) => self.lw(e, mem),
+            BaseInst::Lwu(e) => self.lwu(e, mem),
+            BaseInst::Ld(e) => self.ld(e, mem),
+            BaseInst::Sb(e) => self.sb(e, mem),
+            BaseInst::Sh(e) => self.sh(e, mem),
+            BaseInst::Sw(e) => self.sw(e, mem),
+            BaseInst::Sd(e) => self.sd(e, mem),
             BaseInst::Fence(()) => Ok(()),
             BaseInst::Ecall(e) => Ok(self.ecall(e)),
             BaseInst::Ebreak(e) => Ok(self.ebreak(e)),
@@ -346,88 +340,88 @@ impl Cpu {
         }
     }
 
-    fn lb(&mut self, inst: EncodingI) -> Result<(), Exception> {
+    fn lb(&mut self, inst: EncodingI, mem: &mut Bus) -> Result<(), Exception> {
         let addr = self.get_reg(inst.rs1).wrapping_add(inst.imm) as u64;
 
-        let val = self.mem.load8(addr)? as i8;
+        let val = mem.load8(addr)? as i8;
         self.set_reg(inst.rd, val as i64);
         Ok(())
     }
 
-    fn lbu(&mut self, inst: EncodingI) -> Result<(), Exception> {
+    fn lbu(&mut self, inst: EncodingI, mem: &mut Bus) -> Result<(), Exception> {
         let addr = self.get_reg(inst.rs1).wrapping_add(inst.imm) as u64;
 
-        let val = self.mem.load8(addr)? as u64;
+        let val = mem.load8(addr)? as u64;
         self.set_reg(inst.rd, val as i64);
         Ok(())
     }
 
-    fn lh(&mut self, inst: EncodingI) -> Result<(), Exception> {
+    fn lh(&mut self, inst: EncodingI, mem: &mut Bus) -> Result<(), Exception> {
         let addr = self.get_reg(inst.rs1).wrapping_add(inst.imm) as u64;
 
-        let val = self.mem.load16(addr)? as i16;
+        let val = mem.load16(addr)? as i16;
         self.set_reg(inst.rd, val as i64);
         Ok(())
     }
 
-    fn lhu(&mut self, inst: EncodingI) -> Result<(), Exception> {
+    fn lhu(&mut self, inst: EncodingI, mem: &mut Bus) -> Result<(), Exception> {
         let addr = self.get_reg(inst.rs1).wrapping_add(inst.imm) as u64;
 
-        let val = self.mem.load16(addr)? as u64;
+        let val = mem.load16(addr)? as u64;
         self.set_reg(inst.rd, val as i64);
         Ok(())
     }
 
-    fn lw(&mut self, inst: EncodingI) -> Result<(), Exception> {
+    fn lw(&mut self, inst: EncodingI, mem: &mut Bus) -> Result<(), Exception> {
         let addr = self.get_reg(inst.rs1).wrapping_add(inst.imm) as u64;
 
-        let val = self.mem.load32(addr)? as i32;
+        let val = mem.load32(addr)? as i32;
         self.set_reg(inst.rd, val as i64);
         Ok(())
     }
 
-    fn lwu(&mut self, inst: EncodingI) -> Result<(), Exception> {
+    fn lwu(&mut self, inst: EncodingI, mem: &mut Bus) -> Result<(), Exception> {
         let addr = self.get_reg(inst.rs1).wrapping_add(inst.imm) as u64;
 
-        let val = self.mem.load32(addr)? as u64;
+        let val = mem.load32(addr)? as u64;
         self.set_reg(inst.rd, val as i64);
         Ok(())
     }
 
-    fn ld(&mut self, inst: EncodingI) -> Result<(), Exception> {
+    fn ld(&mut self, inst: EncodingI, mem: &mut Bus) -> Result<(), Exception> {
         let addr = self.get_reg(inst.rs1).wrapping_add(inst.imm) as u64;
 
-        let val = self.mem.load64(addr)? as i64;
+        let val = mem.load64(addr)? as i64;
         self.set_reg(inst.rd, val);
         Ok(())
     }
 
-    fn sb(&mut self, inst: EncodingS) -> Result<(), Exception> {
+    fn sb(&mut self, inst: EncodingS, mem: &mut Bus) -> Result<(), Exception> {
         let addr = self.get_reg(inst.rs1).wrapping_add(inst.imm) as u64;
 
         let val = self.get_reg(inst.rs2) as u8;
-        self.mem.store8(addr, val)
+        mem.store8(addr, val)
     }
 
-    fn sh(&mut self, inst: EncodingS) -> Result<(), Exception> {
+    fn sh(&mut self, inst: EncodingS, mem: &mut Bus) -> Result<(), Exception> {
         let addr = self.get_reg(inst.rs1).wrapping_add(inst.imm) as u64;
 
         let val = self.get_reg(inst.rs2) as u16;
-        self.mem.store16(addr, val)
+        mem.store16(addr, val)
     }
 
-    fn sw(&mut self, inst: EncodingS) -> Result<(), Exception> {
+    fn sw(&mut self, inst: EncodingS, mem: &mut Bus) -> Result<(), Exception> {
         let addr = self.get_reg(inst.rs1).wrapping_add(inst.imm) as u64;
 
         let val = self.get_reg(inst.rs2) as u32;
-        self.mem.store32(addr, val)
+        mem.store32(addr, val)
     }
 
-    fn sd(&mut self, inst: EncodingS) -> Result<(), Exception> {
+    fn sd(&mut self, inst: EncodingS, mem: &mut Bus) -> Result<(), Exception> {
         let addr = self.get_reg(inst.rs1).wrapping_add(inst.imm) as u64;
 
         let val = self.get_reg(inst.rs2) as u64;
-        self.mem.store64(addr, val)
+        mem.store64(addr, val)
     }
 
     fn ecall(&mut self, _: EncodingI) {
