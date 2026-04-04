@@ -2,13 +2,13 @@ use std::fs;
 
 use goblin::elf::{Elf, program_header};
 
-use crate::dev::Bus;
+use crate::{dev::Bus, scheduler::Scheduler};
 
 pub struct BinInfo {
     pub entry: u64,
 }
 
-pub fn load_elf(filename: &str, bus: &mut Bus) -> Result<BinInfo, Box<dyn std::error::Error>> {
+pub fn load_elf(filename: &str, bus: &mut Bus, sched: &mut Scheduler) -> Result<BinInfo, Box<dyn std::error::Error>> {
     let buffer = fs::read(filename)?;
     let elf = Elf::parse(&buffer)?;
 
@@ -25,7 +25,7 @@ pub fn load_elf(filename: &str, bus: &mut Bus) -> Result<BinInfo, Box<dyn std::e
         let segment_data = &buffer[file_offset..file_offset + file_size];
 
         for (i, &byte) in segment_data.iter().enumerate() {
-            bus.store8(addr + (i as u64), byte).unwrap();
+            bus.store8(addr + (i as u64), byte, 0, sched).unwrap();
         }
     }
 

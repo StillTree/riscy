@@ -3,6 +3,7 @@ use crate::{
     dev::Bus,
     exception::{Exception, TrapCause},
     instructions::{BaseInst, EncodingB, EncodingI, EncodingIShifts, EncodingJ, EncodingR, EncodingS, EncodingU, Inst, ZicsrInst},
+    scheduler::Scheduler,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -43,10 +44,10 @@ impl Cpu {
         self.pc = self.csr.handle_trap_exit();
     }
 
-    pub fn step(self: &mut Cpu, mem: &mut Bus) {
+    pub fn step(self: &mut Cpu, mem: &mut Bus, cur_cycle: u64, sched: &mut Scheduler) {
         let prev_pc = self.pc;
 
-        let inst = match mem.load32(self.pc) {
+        let inst = match mem.load32(self.pc, cur_cycle, sched) {
             Ok(inst) => Inst::decode(inst),
             Err(_) => {
                 self.handle_trap(TrapCause::Exception(Exception::InstAccessFault));
@@ -54,9 +55,9 @@ impl Cpu {
             }
         };
 
-        std::println!("Executing at {:x}: {:?}", self.pc, inst);
+        // std::println!("Executing at {:x}: {:?}", self.pc, inst);
 
-        match self.exec_inst(inst, mem) {
+        match self.exec_inst(inst, mem, cur_cycle, sched) {
             Err(e) => {
                 self.handle_trap(TrapCause::Exception(e));
             }
@@ -70,14 +71,14 @@ impl Cpu {
 }
 
 impl Cpu {
-    fn exec_inst(&mut self, inst: Inst, mem: &mut Bus) -> Result<(), Exception> {
+    fn exec_inst(&mut self, inst: Inst, mem: &mut Bus, cur_cycle: u64, sched: &mut Scheduler) -> Result<(), Exception> {
         match inst {
-            Inst::Base(base) => self.exec_base_inst(base, mem),
+            Inst::Base(base) => self.exec_base_inst(base, mem, cur_cycle, sched),
             Inst::Zicsr(zicsr) => self.exec_zicsr_inst(zicsr),
         }
     }
 
-    fn exec_base_inst(&mut self, inst: BaseInst, mem: &mut Bus) -> Result<(), Exception> {
+    fn exec_base_inst(&mut self, inst: BaseInst, mem: &mut Bus, cur_cycle: u64, sched: &mut Scheduler) -> Result<(), Exception> {
         match inst {
             BaseInst::Addi(e) => Ok(self.addi(e)),
             BaseInst::Slti(e) => Ok(self.slti(e)),
@@ -117,17 +118,17 @@ impl Cpu {
             BaseInst::Bge(e) => Ok(self.bge(e)),
             BaseInst::Bltu(e) => Ok(self.bltu(e)),
             BaseInst::Bgeu(e) => Ok(self.bgeu(e)),
-            BaseInst::Lb(e) => self.lb(e, mem),
-            BaseInst::Lbu(e) => self.lbu(e, mem),
-            BaseInst::Lh(e) => self.lh(e, mem),
-            BaseInst::Lhu(e) => self.lhu(e, mem),
-            BaseInst::Lw(e) => self.lw(e, mem),
-            BaseInst::Lwu(e) => self.lwu(e, mem),
-            BaseInst::Ld(e) => self.ld(e, mem),
-            BaseInst::Sb(e) => self.sb(e, mem),
-            BaseInst::Sh(e) => self.sh(e, mem),
-            BaseInst::Sw(e) => self.sw(e, mem),
-            BaseInst::Sd(e) => self.sd(e, mem),
+            BaseInst::Lb(e) => self.lb(e, mem, cur_cycle, sched),
+            BaseInst::Lbu(e) => self.lbu(e, mem, cur_cycle, sched),
+            BaseInst::Lh(e) => self.lh(e, mem, cur_cycle, sched),
+            BaseInst::Lhu(e) => self.lhu(e, mem, cur_cycle, sched),
+            BaseInst::Lw(e) => self.lw(e, mem, cur_cycle, sched),
+            BaseInst::Lwu(e) => self.lwu(e, mem, cur_cycle, sched),
+            BaseInst::Ld(e) => self.ld(e, mem, cur_cycle, sched),
+            BaseInst::Sb(e) => self.sb(e, mem, cur_cycle, sched),
+            BaseInst::Sh(e) => self.sh(e, mem, cur_cycle, sched),
+            BaseInst::Sw(e) => self.sw(e, mem, cur_cycle, sched),
+            BaseInst::Sd(e) => self.sd(e, mem, cur_cycle, sched),
             BaseInst::Fence(()) => Ok(()),
             BaseInst::Ecall(e) => Ok(self.ecall(e)),
             BaseInst::Ebreak(e) => Ok(self.ebreak(e)),
@@ -340,88 +341,88 @@ impl Cpu {
         }
     }
 
-    fn lb(&mut self, inst: EncodingI, mem: &mut Bus) -> Result<(), Exception> {
+    fn lb(&mut self, inst: EncodingI, mem: &mut Bus, cur_cycle: u64, sched: &mut Scheduler) -> Result<(), Exception> {
         let addr = self.get_reg(inst.rs1).wrapping_add(inst.imm) as u64;
 
-        let val = mem.load8(addr)? as i8;
+        let val = mem.load8(addr, cur_cycle, sched)? as i8;
         self.set_reg(inst.rd, val as i64);
         Ok(())
     }
 
-    fn lbu(&mut self, inst: EncodingI, mem: &mut Bus) -> Result<(), Exception> {
+    fn lbu(&mut self, inst: EncodingI, mem: &mut Bus, cur_cycle: u64, sched: &mut Scheduler) -> Result<(), Exception> {
         let addr = self.get_reg(inst.rs1).wrapping_add(inst.imm) as u64;
 
-        let val = mem.load8(addr)? as u64;
+        let val = mem.load8(addr, cur_cycle, sched)? as u64;
         self.set_reg(inst.rd, val as i64);
         Ok(())
     }
 
-    fn lh(&mut self, inst: EncodingI, mem: &mut Bus) -> Result<(), Exception> {
+    fn lh(&mut self, inst: EncodingI, mem: &mut Bus, cur_cycle: u64, sched: &mut Scheduler) -> Result<(), Exception> {
         let addr = self.get_reg(inst.rs1).wrapping_add(inst.imm) as u64;
 
-        let val = mem.load16(addr)? as i16;
+        let val = mem.load16(addr, cur_cycle, sched)? as i16;
         self.set_reg(inst.rd, val as i64);
         Ok(())
     }
 
-    fn lhu(&mut self, inst: EncodingI, mem: &mut Bus) -> Result<(), Exception> {
+    fn lhu(&mut self, inst: EncodingI, mem: &mut Bus, cur_cycle: u64, sched: &mut Scheduler) -> Result<(), Exception> {
         let addr = self.get_reg(inst.rs1).wrapping_add(inst.imm) as u64;
 
-        let val = mem.load16(addr)? as u64;
+        let val = mem.load16(addr, cur_cycle, sched)? as u64;
         self.set_reg(inst.rd, val as i64);
         Ok(())
     }
 
-    fn lw(&mut self, inst: EncodingI, mem: &mut Bus) -> Result<(), Exception> {
+    fn lw(&mut self, inst: EncodingI, mem: &mut Bus, cur_cycle: u64, sched: &mut Scheduler) -> Result<(), Exception> {
         let addr = self.get_reg(inst.rs1).wrapping_add(inst.imm) as u64;
 
-        let val = mem.load32(addr)? as i32;
+        let val = mem.load32(addr, cur_cycle, sched)? as i32;
         self.set_reg(inst.rd, val as i64);
         Ok(())
     }
 
-    fn lwu(&mut self, inst: EncodingI, mem: &mut Bus) -> Result<(), Exception> {
+    fn lwu(&mut self, inst: EncodingI, mem: &mut Bus, cur_cycle: u64, sched: &mut Scheduler) -> Result<(), Exception> {
         let addr = self.get_reg(inst.rs1).wrapping_add(inst.imm) as u64;
 
-        let val = mem.load32(addr)? as u64;
+        let val = mem.load32(addr, cur_cycle, sched)? as u64;
         self.set_reg(inst.rd, val as i64);
         Ok(())
     }
 
-    fn ld(&mut self, inst: EncodingI, mem: &mut Bus) -> Result<(), Exception> {
+    fn ld(&mut self, inst: EncodingI, mem: &mut Bus, cur_cycle: u64, sched: &mut Scheduler) -> Result<(), Exception> {
         let addr = self.get_reg(inst.rs1).wrapping_add(inst.imm) as u64;
 
-        let val = mem.load64(addr)? as i64;
+        let val = mem.load64(addr, cur_cycle, sched)? as i64;
         self.set_reg(inst.rd, val);
         Ok(())
     }
 
-    fn sb(&mut self, inst: EncodingS, mem: &mut Bus) -> Result<(), Exception> {
+    fn sb(&mut self, inst: EncodingS, mem: &mut Bus, cur_cycle: u64, sched: &mut Scheduler) -> Result<(), Exception> {
         let addr = self.get_reg(inst.rs1).wrapping_add(inst.imm) as u64;
 
         let val = self.get_reg(inst.rs2) as u8;
-        mem.store8(addr, val)
+        mem.store8(addr, val, cur_cycle, sched)
     }
 
-    fn sh(&mut self, inst: EncodingS, mem: &mut Bus) -> Result<(), Exception> {
+    fn sh(&mut self, inst: EncodingS, mem: &mut Bus, cur_cycle: u64, sched: &mut Scheduler) -> Result<(), Exception> {
         let addr = self.get_reg(inst.rs1).wrapping_add(inst.imm) as u64;
 
         let val = self.get_reg(inst.rs2) as u16;
-        mem.store16(addr, val)
+        mem.store16(addr, val, cur_cycle, sched)
     }
 
-    fn sw(&mut self, inst: EncodingS, mem: &mut Bus) -> Result<(), Exception> {
+    fn sw(&mut self, inst: EncodingS, mem: &mut Bus, cur_cycle: u64, sched: &mut Scheduler) -> Result<(), Exception> {
         let addr = self.get_reg(inst.rs1).wrapping_add(inst.imm) as u64;
 
         let val = self.get_reg(inst.rs2) as u32;
-        mem.store32(addr, val)
+        mem.store32(addr, val, cur_cycle, sched)
     }
 
-    fn sd(&mut self, inst: EncodingS, mem: &mut Bus) -> Result<(), Exception> {
+    fn sd(&mut self, inst: EncodingS, mem: &mut Bus, cur_cycle: u64, sched: &mut Scheduler) -> Result<(), Exception> {
         let addr = self.get_reg(inst.rs1).wrapping_add(inst.imm) as u64;
 
         let val = self.get_reg(inst.rs2) as u64;
-        mem.store64(addr, val)
+        mem.store64(addr, val, cur_cycle, sched)
     }
 
     fn ecall(&mut self, _: EncodingI) {
