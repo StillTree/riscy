@@ -2,13 +2,13 @@ use crate::{exception::Exception, scheduler::Scheduler};
 
 pub mod htif;
 
-struct Req {
-    cycle: u64,
+pub struct Req {
+    pub cycle: u64,
 }
 
 pub struct DevActions {
-    cycles_now: u64,
-    requests: Vec<Req>,
+    pub cycles_now: u64,
+    pub requests: Vec<Req>,
 }
 
 impl DevActions {
@@ -30,6 +30,11 @@ impl DevActions {
 pub trait MmioDev {
     fn load(&mut self, actions: &mut DevActions, addr: u64, size: usize) -> Result<u64, Exception>;
     fn store(&mut self, actions: &mut DevActions, addr: u64, size: usize, val: u64) -> Result<(), Exception>;
+
+    #[allow(unused)]
+    fn on_service(&mut self, actions: &mut DevActions) -> Result<(), Exception> {
+        Ok(())
+    }
 }
 
 pub enum MemRegionKind {
@@ -71,7 +76,7 @@ pub struct Bus {
 // just be faster bruh. A cache would also be nice here.
 impl Bus {
     fn load_bytes<const N: usize>(&mut self, addr: u64, cycles_now: u64, sched: &mut Scheduler) -> Result<u64, Exception> {
-        if let Some(reg) = self.find_mem_region(addr) {
+        if let Some((reg, index)) = self.find_mem_region(addr) {
             let i = (addr - reg.start) as usize;
 
             match &mut reg.kind {
@@ -90,7 +95,7 @@ impl Bus {
                     let val = dev.load(&mut actions, i as u64, N)?;
 
                     for req in actions.requests {
-                        sched.schedule_at(req.cycle);
+                        sched.schedule_at(req.cycle, index);
                     }
 
                     Ok(val)
@@ -102,7 +107,7 @@ impl Bus {
     }
 
     fn store_bytes<const N: usize>(&mut self, addr: u64, val: u64, cycles_now: u64, sched: &mut Scheduler) -> Result<(), Exception> {
-        if let Some(reg) = self.find_mem_region(addr) {
+        if let Some((reg, index)) = self.find_mem_region(addr) {
             let i = (addr - reg.start) as usize;
 
             match &mut reg.kind {
@@ -121,7 +126,7 @@ impl Bus {
                     dev.store(&mut actions, i as u64, N, val)?;
 
                     for req in actions.requests {
-                        sched.schedule_at(req.cycle);
+                        sched.schedule_at(req.cycle, index);
                     }
 
                     Ok(())
@@ -164,7 +169,7 @@ impl Bus {
         self.store_bytes::<8>(addr, val as u64, cycles_now, sched)
     }
 
-    fn find_mem_region(&mut self, addr: u64) -> Option<&mut MemRegion> {
+    fn find_mem_region(&mut self, addr: u64) -> Option<(&mut MemRegion, usize)> {
         let i = self
             .regions
             .binary_search_by(|reg| {
@@ -178,6 +183,6 @@ impl Bus {
             })
             .ok()?;
 
-        Some(&mut self.regions[i])
+        Some((&mut self.regions[i], i))
     }
 }

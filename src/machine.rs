@@ -46,7 +46,7 @@ impl Machine {
 
         loop {
             println!("Trying to service devices at cycle {}", self.cur_cycle);
-            self.sched.service_due(self.cur_cycle);
+            self.sched.service_due(&mut self.bus, self.cur_cycle);
 
             while self.cur_cycle < self.sched.next_deadline() {
                 println!("Executing cycle {}", self.cur_cycle);

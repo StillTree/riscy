@@ -43,4 +43,9 @@ impl MmioDev for Htif {
 
         Ok(())
     }
+
+    fn on_service(&mut self, actions: &mut super::DevActions) -> Result<(), crate::exception::Exception> {
+        println!("HTIF serviced :DDD");
+        Ok(())
+    }
 }

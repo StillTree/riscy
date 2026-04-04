@@ -1,9 +1,13 @@
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 
+use crate::dev::{Bus, DevActions};
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct Schedulable {
     pub cycle: u64,
+    // TODO: This is unsafe and should ideally be replaced with something like a unique ID in the future
+    pub index: usize,
 }
 
 impl PartialOrd for Schedulable {
@@ -35,10 +39,10 @@ impl Scheduler {
         self.next_deadline
     }
 
-    pub fn schedule_at(&mut self, cycle: u64) {
+    pub fn schedule_at(&mut self, cycle: u64, index: usize) {
         println!("New event scheduled for cycle {}", cycle);
 
-        self.schedulables.push(Reverse(Schedulable { cycle }));
+        self.schedulables.push(Reverse(Schedulable { cycle, index }));
 
         if cycle < self.next_deadline {
             println!("Shortening the next deadline");
@@ -46,21 +50,38 @@ impl Scheduler {
         }
     }
 
-    pub fn service_due(&mut self, cur_cycle: u64) {
-        while let Some(e) = self.schedulables.peek() {
-            if e.0.cycle > cur_cycle {
+    pub fn service_due(&mut self, bus: &mut Bus, cur_cycle: u64) {
+        while let Some(Reverse(e)) = self.schedulables.peek() {
+            if e.cycle > cur_cycle {
                 break;
             }
 
+            let Reverse(sched) = self.schedulables.pop().unwrap();
+
+            let mut actions = DevActions {
+                cycles_now: cur_cycle,
+                requests: Vec::with_capacity(2),
+            };
+
+            match &mut bus.regions[sched.index].kind {
+                crate::dev::MemRegionKind::Ram(_) => panic!(),
+                crate::dev::MemRegionKind::Mmio(dev) => {
+                    dev.on_service(&mut actions).unwrap();
+                }
+            }
+
+            for req in actions.requests {
+                self.schedulables.push(Reverse(Schedulable {
+                    index: sched.index,
+                    cycle: req.cycle,
+                }));
+            }
+
+            // TODO: Service the device
             println!("  device serviced");
-            self.schedulables.pop();
         }
 
+        self.next_deadline = self.schedulables.peek().map(|Reverse(e)| e.cycle).unwrap_or(u64::max_value());
         println!("  No devices left to service");
-        self.next_deadline = if let Some(e) = self.schedulables.peek() {
-            e.0.cycle
-        } else {
-            u64::max_value()
-        };
     }
 }
